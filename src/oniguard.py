@@ -1,5 +1,5 @@
 from os import get_terminal_size
-from assets import program_name, descr
+from assets import PROGRAM_NAME, DESCR
 
 class OniManager:
     def __init__(self, data: dict) -> None:
@@ -12,9 +12,9 @@ if __name__ == "__main__":
     max_width_ascii_art = max(len(line) for line in program_name.strip().split('\n'))
     if get_terminal_size().columns < max_width_ascii_art: program_name = "OniGuard"
 
-    parser = ArgumentParser(prog=program_name,
+    parser = ArgumentParser(prog=PROGRAM_NAME,
                             formatter_class=RawDescriptionHelpFormatter,
-                            description=descr,
+                            description=DESCR,
                             epilog="Have fun with it = )")
 
     parser.add_argument("username", help="Specify which user you want to login as.")
