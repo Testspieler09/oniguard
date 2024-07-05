@@ -1,24 +1,31 @@
 from secrets import choice
+from cryptography.fernet import Fernet
 from string import ascii_letters, digits, punctuation
 from os.path import exists, dirname
 from os import chdir
 from json import load, dumps
+from logging import getLogger
+
+logger = getLogger(__name__)
 
 class Cryptographer:
-    def __init__(self) -> None:
-        pass
+    def __init__(self, key: str, filepath: str) -> None:
+        self.file = filepath
+        self.fernet = Fernet(key)
+
+    @classmethod
+    def for_new_file(cls, filepath: str) -> None:
+        return cls(self.gen_key(), filepath)
 
     @staticmethod
-    def gen_salt(size: int) -> None:
-        pass
+    def gen_key() -> str:
+        return Fernet.generate_key()
 
-    @staticmethod
-    def encrypt(file: str) -> None:
-        pass
+    def encrypt(self, data: any) -> str:
+        return self.fernet.encrypt(filedata.encode())
 
-    @staticmethod
-    def decrypt(file: str) -> None:
-        pass
+    def decrypt(self, data: any) -> str:
+        return self.fernet.decrypt(filedata).decode()
 
 class FileManager:
     """
@@ -76,10 +83,24 @@ def generate_password(length: int) -> str:
     return password
 
 def evaluate_password(password: str) -> str:
-    pass
+    # make the search a bit more efficient
+    def element_is_in_password(element: str) -> bool:
+        for i in element:
+            if i in password:
+                return True
+        return False
+    # Evaluation
+    length = len(password)
+    variaty = element_is_in_password(ascii_letters[:26]) + element_is_in_password(ascii_letters[26:]) + element_is_in_password(digits) + element_is_in_password(punctuation)
+    if length < 8 or variaty <= 2:
+        return "bad"
+    elif variaty == 3:
+        return "medium"
+    elif variaty == 4:
+        return "good"
 
 if __name__ == "__main__":
-    from sys import argv
-    from os.path import join, split
-    file = "test.txt"
-    f = File_Manager(join(split(argv[0])[0], file))
+    for _ in range(5):
+        pw = generate_password(20)
+        print(pw)
+        print(evaluate_password(pw))
