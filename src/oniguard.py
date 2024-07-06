@@ -14,12 +14,13 @@ def main(args: object) -> None:
     folder_path_cross_platform = join("..", "userdata", args.username)
     if not exists(folder_path_cross_platform): mkdir(folder_path_cross_platform)
     logger = setup_logger(join(folder_path_cross_platform, "oniguard.log"))
+    Cryptographer(join(folder_path_cross_platform, f"{args.username}.data"))
 
 if __name__ == "__main__":
     from argparse import ArgumentParser, RawDescriptionHelpFormatter
 
     max_width_ascii_art = max(len(line) for line in PROGRAM_NAME.strip().split('\n'))
-    if get_terminal_size().columns < max_width_ascii_art: program_name = "OniGuard"
+    if get_terminal_size().columns < max_width_ascii_art: PROGRAM_NAME = "OniGuard"
 
     parser = ArgumentParser(prog=PROGRAM_NAME,
                             formatter_class=RawDescriptionHelpFormatter,

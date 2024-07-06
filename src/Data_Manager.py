@@ -1,7 +1,7 @@
 from secrets import choice
 from cryptography.fernet import Fernet
 from string import ascii_letters, digits, punctuation
-from os.path import exists, dirname
+from os.path import exists, dirname, split, join
 from os import chdir
 from json import load, dumps
 from logging import getLogger
@@ -9,9 +9,14 @@ from logging import getLogger
 logger = getLogger(__name__)
 
 class Cryptographer:
-    def __init__(self, key: str, filepath: str) -> None:
+    def __init__(self, filepath: str) -> None:
         self.file = filepath
-        self.fernet = Fernet(key)
+        try:
+            key = self.get_key()
+            self.fernet = Fernet(key)
+        except Exception as e:
+            logger.info("Keyfile doesn't exist or someting else went wrong. For more detail see the error below.")
+            logger.critical(e)
 
     @classmethod
     def for_new_file(cls, filepath: str) -> None:
@@ -19,7 +24,13 @@ class Cryptographer:
 
     @staticmethod
     def gen_key() -> str:
-        return Fernet.generate_key()
+        key = Fernet.generate_key()
+        # write to hidden file
+        return key
+
+    def get_key(self) -> str:
+        with open(join(split(self.file)[0], ".key"), "r") as f:
+            return f.readline()
 
     def encrypt(self, data: any) -> str:
         return self.fernet.encrypt(filedata.encode())
