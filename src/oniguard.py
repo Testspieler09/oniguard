@@ -1,7 +1,7 @@
 from os import get_terminal_size, mkdir
 from os.path import exists, join
 from assets import PROGRAM_NAME, DESCR
-from Data_Manager import Cryptographer, FileManager, generate_password, evaluate_password
+from Data_Manager import DataManager, generate_password, evaluate_password
 from LOGGER import setup_logger
 
 class OniManager:
@@ -14,7 +14,7 @@ def main(args: object) -> None:
     folder_path_cross_platform = join("..", "userdata", args.username)
     if not exists(folder_path_cross_platform): mkdir(folder_path_cross_platform)
     logger = setup_logger(join(folder_path_cross_platform, "oniguard.log"))
-    Cryptographer(join(folder_path_cross_platform, f"{args.username}.data"))
+    DataManager(join(folder_path_cross_platform, f"{args.username}.data"))
 
 if __name__ == "__main__":
     from argparse import ArgumentParser, RawDescriptionHelpFormatter
