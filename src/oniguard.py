@@ -1,5 +1,12 @@
-from os import get_terminal_size, mkdir
+from getpass import getpass
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from os import get_terminal_size, mkdir, urandom
 from os.path import exists, join
+from time import sleep
+from base64 import urlsafe_b64encode, urlsafe_b64decode
+from shutil import rmtree
+from sys import exit
 from assets import PROGRAM_NAME, DESCR
 from Data_Manager import DataManager, generate_password, evaluate_password
 from LOGGER import setup_logger
@@ -9,10 +16,69 @@ class OniManager:
         self.rank = data["rank"]
         self.score = data["score"]
 
+def get_hashing_obj(salt: str) -> object:
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=480000,
+    )
+    return kdf
+
+def ask_yes_no(message: str) -> bool:
+    choice = ""
+    while choice.lower() != "y" and choice.lower() != "n":
+        choice = input(f"{message} [Y/n] ")
+    if choice.lower()=="y":
+        return True
+    elif choice.lower()=="n":
+        return False
+    else:
+        logger.critical("The ask yes no function is broken.")
+
+def login_procedure(folder_path_cross_platform: str) -> None:
+    if not exists(folder_path_cross_platform):
+        choice = ask_yes_no(f"Do you want to create a new user {args.username}?")
+        if choice:
+            mkdir(folder_path_cross_platform)
+            salt = urandom(16)
+            with open(join(folder_path_cross_platform, ".salt"), "wb") as f:
+                f.write(salt)
+            kdf = get_hashing_obj(salt)
+            pw = getpass(f"Please provide a master password for {args.username}: ")
+            check_pw = getpass(f"Please repeat the password for {args.username}: ")
+            if pw == check_pw:
+                with open(join(folder_path_cross_platform, ".key"), "wb") as f:
+                        f.write(urlsafe_b64encode(kdf.derive(pw.encode())))
+                print("Password saved [hashed]")
+            else:
+                print("The passwords are not identical.")
+                exit()
+        else:
+            exit()
+    with open(join(folder_path_cross_platform, ".salt"), "rb") as f:
+        kdf = get_hashing_obj(f.readline())
+    password = getpass(f"Please provide the master password for {args.username}: ")
+    with open(join(folder_path_cross_platform, ".key"), "rb") as f:
+        key = urlsafe_b64decode(f.readline())
+    try:
+        kdf.verify(password.encode(), key)
+    except:
+        print("Password not correct")
+        sleep(5)
+        exit()
+
 def main(args: object) -> None:
-    # Start logger in users data folder
     folder_path_cross_platform = join("..", "userdata", args.username)
-    if not exists(folder_path_cross_platform): mkdir(folder_path_cross_platform)
+    # Delete userdata
+    if args.delete and exists(folder_path_cross_platform):
+        choice = ask_yes_no(f"Do you realy whish to delete {args.username}?")
+        if choice:
+            rmtree(folder_path_cross_platform)
+            print(f"User {args.username} got removed")
+        exit()
+    # End delete userdata
+    login_procedure(folder_path_cross_platform)
     logger = setup_logger(join(folder_path_cross_platform, "oniguard.log"))
     DataManager(join(folder_path_cross_platform, f"{args.username}.data"))
 
@@ -28,8 +94,8 @@ if __name__ == "__main__":
                             epilog="Have fun with it = )")
 
     parser.add_argument("username", help="Specify which user you want to login as.")
-    parser.add_argument("-d", "--debug", action="store_true", help="NOT FOR CASUAL USE. Stores data in plain text.")
+    parser.add_argument("-d", "--delete", action="store_true", help="Delete a user")
 
     args = parser.parse_args()
-    # check login info
+
     main(args)

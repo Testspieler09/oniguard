@@ -39,20 +39,19 @@ class Cryptographer:
         try:
             return self.fernet.decrypt(data).decode()
         except Exception as e:
-            logger.info("fail")
             logger.critical(e)
 
 class FileManager:
     """
     A class that manages a JSON file and the respective backup file
     """
-    def __init__(self, path_to_file: str, crypt=None) -> None:
+    def __init__(self, path_to_file: str) -> None:
         if not exists(path_to_file):
             self.for_new_file(path_to_file)
             logger.critical("File not found in given directory.")
             logger.info(f"Therefore a file was created at {path_to_file}")
             return
-        self.crypt = Cryptographer(Cryptographer.get_key(path_to_file)) if crypt == None else crypt
+        self.crypt = Cryptographer(Cryptographer.get_key(path_to_file))
         self.path_to_file: str = path_to_file
         self.backup_path: str = splitext(path_to_file)[0] + ".backup"
         self.data: dict = self.read_file_data()
@@ -62,13 +61,11 @@ class FileManager:
         """
         Alternative constructor for when the JSON file doesn't exist yet
         """
-        key = Cryptographer.gen_key()
-        with open(join(split(path_with_filename_and_extension)[0], ".key"), "wb") as f:
-            f.write(key)
-        crypt = Cryptographer(key)
+        logger.info(path_with_filename_and_extension)
+        crypt = Cryptographer(Cryptographer.get_key(path_with_filename_and_extension))
         with open(path_with_filename_and_extension, "wb") as f:
             f.write(crypt.encrypt('{}'))
-        return cls(path_with_filename_and_extension, crypt)
+        return cls(path_with_filename_and_extension)
 
     def read_file_data(self) -> dict:
         """
@@ -102,8 +99,8 @@ class FileManager:
             update_data(load(f))
 
 class DataManager(FileManager):
-    def __init__(self, path_to_file, crypt=None) -> None:
-        super().__init__(path_to_file, crypt)
+    def __init__(self, path_to_file) -> None:
+        super().__init__(path_to_file)
 
 # SOME FUNCTIONS REGARDING PASSWORD STUFF
 def generate_password(length: int) -> str:
