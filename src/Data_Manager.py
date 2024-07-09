@@ -9,19 +9,11 @@ logger = getLogger(__name__)
 
 class Cryptographer:
     def __init__(self, key: str) -> None:
-        logger.info("Cryptographer initialized.")
         try:
             self.fernet = Fernet(key)
+            logger.info("Cryptographer initialized.")
         except Exception as e:
             logger.info("Keyfile doesn't exist or someting else went wrong. For more detail see the error below.")
-            logger.critical(e)
-
-    @staticmethod
-    def get_key(filepath) -> str:
-        try:
-            with open(join(split(filepath)[0], ".key"), "rb") as f:
-                return f.readline()
-        except Exception as e:
             logger.critical(e)
 
     @staticmethod
@@ -45,27 +37,26 @@ class FileManager:
     """
     A class that manages a JSON file and the respective backup file
     """
-    def __init__(self, path_to_file: str) -> None:
+    def __init__(self, path_to_file: str, key: str) -> None:
         if not exists(path_to_file):
-            self.for_new_file(path_to_file)
             logger.critical("File not found in given directory.")
             logger.info(f"Therefore a file was created at {path_to_file}")
+            self.for_new_file(path_to_file, key)
             return
-        self.crypt = Cryptographer(Cryptographer.get_key(path_to_file))
+        self.crypt = Cryptographer(key)
         self.path_to_file: str = path_to_file
         self.backup_path: str = splitext(path_to_file)[0] + ".backup"
         self.data: dict = self.read_file_data()
 
-    @classmethod
-    def for_new_file(cls, path_with_filename_and_extension: str) -> None:
+    def for_new_file(self, path_with_filename_and_extension: str, key: str) -> None:
         """
         Alternative constructor for when the JSON file doesn't exist yet
         """
         logger.info(path_with_filename_and_extension)
-        crypt = Cryptographer(Cryptographer.get_key(path_with_filename_and_extension))
+        crypt = Cryptographer(key)
         with open(path_with_filename_and_extension, "wb") as f:
             f.write(crypt.encrypt('{}'))
-        return cls(path_with_filename_and_extension)
+        return
 
     def read_file_data(self) -> dict:
         """
@@ -73,7 +64,10 @@ class FileManager:
         """
         with open(self.path_to_file, "r") as f:
             data = self.crypt.decrypt(f.readline())
-            return loads(data)
+            if data != None: return loads(data)
+
+        logger.info("Wrong password provided or something else went wrong.")
+        raise Exception("Wrong Password")
 
     def update_data(self, data: dict) -> None:
         """
@@ -99,8 +93,22 @@ class FileManager:
             update_data(load(f))
 
 class DataManager(FileManager):
-    def __init__(self, path_to_file) -> None:
-        super().__init__(path_to_file)
+    """
+    Wrapperclass for a JSON structure like this:
+    {
+        "schemes": {
+            "hash": list[str]
+        },
+        "entries": {
+            "hash": {
+                "scheme_hash": str,
+                "values": list
+            }
+        }
+    }
+    """
+    def __init__(self, path_to_file: str, key: str) -> None:
+        super().__init__(path_to_file, key)
 
 # SOME FUNCTIONS REGARDING PASSWORD STUFF
 def generate_password(length: int) -> str:
