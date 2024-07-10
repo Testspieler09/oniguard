@@ -12,11 +12,8 @@ An Oni-themed password manager, primarily designed for terminal use, though a GU
 
 The manager boasts several features:
     - password generation
-    - automatic login into websites
-    - a lightweigth autocomplition
-    - a robust search function
-    - editable schemas
-    - and group capabilities.
+    - a robust search function and
+    - editable schemas.
 
 Additionally, it incorporates color-coded elements and employs cryptography for enhanced security purposes.
 """

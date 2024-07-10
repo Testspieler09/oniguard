@@ -1,5 +1,7 @@
 from secrets import choice
 from cryptography.fernet import Fernet
+from uuid import id4
+from datetime import datetime
 from string import ascii_letters, digits, punctuation
 from os.path import exists, join, splitext, split
 from json import loads
@@ -55,7 +57,7 @@ class FileManager:
         logger.info(path_with_filename_and_extension)
         crypt = Cryptographer(key)
         with open(path_with_filename_and_extension, "wb") as f:
-            f.write(crypt.encrypt('{}'))
+            f.write(crypt.encrypt('{"schemes": {}, "entries": {}}'))
         return
 
     def read_file_data(self) -> dict:
@@ -109,6 +111,76 @@ class DataManager(FileManager):
     """
     def __init__(self, path_to_file: str, key: str) -> None:
         super().__init__(path_to_file, key)
+        self.hidden_stats = ["changedate", "creationdate"]
+
+    @staticmethod
+    def gen_hash() -> str:
+        return uuid4().hex
+
+    @staticmethod
+    def group_data_by_schemes(data: dict) -> dict:
+        """
+        For display purposes
+        """
+        return dict(sorted(x.items(), key=lambda item: item[1]["scheme_hash"]))
+
+    # Getter methods
+    def get_all_entries(self) -> dict:
+        return self.data["entries"]
+
+    def get_entries_of_scheme(self, scheme_hash: str) -> dict:
+        entries = {}
+        for key, entry in self.data["entries"].items():
+            if entry["scheme_hash"] == scheme_hash: entries.update({key: entry})
+        return entries
+
+    # Add data
+    def add_entry(self, scheme_hash: str, entry: list) -> None:
+        data = {}
+        now = str(datetime.now())
+        entry.extend([now, now])
+        data["scheme_hash"] = scheme_hash
+        data["values"] = entry
+        self.data["entries"].update(data)
+
+    def add_scheme(self, scheme: list) -> None:
+        scheme.extend(self.hidden_stats)
+        self.data["schemes"].update({self.gen_hash(): scheme})
+
+    # Update methods
+    def update_entry(self, entry_hash: str, new_data: list) -> None:
+        if not entry_hash in self.data["entries"].keys(): return
+        values, type_of_data = new_data
+        if type_of_data=="values":
+            values.extend([str(datetime.now()),
+                           self.data["entries"][entry_hash]["values"][-1]])
+            self.data["entries"][entry_hash]["values"] = values
+        elif type_of_data=="scheme_hash":
+            self.data["entries"][entry_hash]["scheme_hash"] = values
+        else:
+            logger.critical("Data parsed can't be worked with. [update_entry]")
+
+    def update_scheme(self, scheme_hash: str, new_data: list) -> None:
+        if not scheme_hash in self.data["schemes"].keys(): return
+        new_data.extend(self.hidden_stats)
+        self.data["schemes"][scheme_hash] = new_data
+
+    # Delete methods
+    def delete_entry(self, entry_hash: str) -> None:
+        if not entry_hash in self.data["entries"].keys(): return
+        del self.data["entries"][entry_hash]
+
+    def delete_scheme(self, scheme_hash: str) -> None:
+        if not self.get_entries_of_scheme(scheme_hash): return
+        if not scheme_hash in self.data["schemes"].keys(): return
+        del self.data["schemes"][scheme_hash]
+
+    # Output methods
+    def beautify_output(self) -> list[str]:
+        """
+        if multiple schemes display them below each other
+        """
+        pass
 
 # SOME FUNCTIONS REGARDING PASSWORD STUFF
 def generate_password(length: int) -> str:

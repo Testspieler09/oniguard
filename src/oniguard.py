@@ -45,7 +45,6 @@ def login_procedure(folder_path_cross_platform: str) -> str:
             mkdir(folder_path_cross_platform)
             logger = setup_logger(join(folder_path_cross_platform, "oniguard.log"))
             salt = urandom(16)
-            logger.info(salt)
             with open(join(folder_path_cross_platform, ".salt"), "wb") as f:
                 f.write(salt)
             kdf = get_hashing_obj(salt)
