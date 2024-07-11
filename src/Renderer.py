@@ -2,6 +2,26 @@ from curses import newwin, newpad, initscr, init_pair, color_pair, start_color, 
 from os import get_terminal_size
 from assets import HELP_MESSAGE, FOOTER_TEXT
 from time import sleep
+from logging import getLogger
+
+logger = getLogger(__name__)
+
+class PopUp:
+    def __init__(self, screen: object): -> None:
+        pass
+
+    def event_handler(self) -> None:
+        pass
+
+    def kill_pop_up(self) -> None:
+        pass
+
+    # Read input
+    def get_input_checkboxes(self, options: list) -> list:
+        pass
+
+    def get_input_radio_btn(self, options: list) -> str:
+        pass
 
 class Renderer:
     def __init__(self):
@@ -24,11 +44,6 @@ class Renderer:
         self.main_start_x_y = (2, 0)
         self.main_end_x_y = (self.window_dimensions[0][0]-2, self.window_dimensions[0][1]-1)
         self.active_window = 1
-        # self.content = self.data.get_all_data() if content==None else content
-        # self.content_beautified = self.data.display_task_details(self.content) if content_beautified==None else content_beautified
-        # self.current_order_with_args = ["standard", self.content] # other would be group, label and importance
-        self.opened_task_hash = ""
-        self.current_filter = ["self.data.get_all_data", ()]
 
         # COLOR STUFF FOR IMPORTANCE
         start_color()
@@ -98,7 +113,7 @@ class Renderer:
                 self.scroll_pad(self.active_window)
             # Main operations
             case "S" | "s":
-                self.show_procedure()
+                self.search_procedure()
             case "A" | "a":
                 self.add_procedure()
             case "C" | "c":
@@ -125,6 +140,22 @@ class Renderer:
             case "KEY_RESIZE":
                 self.kill_scr()
                 ScreenManager()
+
+    # Implementations of the main procedures
+    def search_procedure(self) -> None:
+        pass
+
+    def add_procedure(self) -> None:
+        pass
+
+    def change_procedure(self) -> None:
+        pass
+
+    def filter_procedure(self) -> None:
+        pass
+
+    def delete_procedure(self) -> None:
+        pass
 
     # Some getter methods
     def get_main_dimensions(self) -> tuple:
@@ -185,7 +216,7 @@ class Renderer:
         try:
             self.windows[win].addstr(y, x, text, attributes)
         except Exception:
-            print(error_msg)
+            logger.critical(error_msg)
         try:
             self.windows[win].refresh()
         except Exception:
