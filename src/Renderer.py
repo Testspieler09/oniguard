@@ -1,4 +1,5 @@
 from curses import newwin, newpad, initscr, init_pair, color_pair, start_color, curs_set, cbreak, noecho, nocbreak, echo, endwin, COLOR_BLACK, COLOR_BLUE, COLOR_GREEN, COLOR_RED, A_UNDERLINE, A_NORMAL
+from textwrap import wrap
 from os import get_terminal_size
 from assets import HELP_MESSAGE, FOOTER_TEXT
 from time import sleep
@@ -7,21 +8,81 @@ from logging import getLogger
 logger = getLogger(__name__)
 
 class PopUp:
-    def __init__(self, screen: object): -> None:
-        pass
+    def __init__(self, screen: object) -> None:
+        y, x = screen.getmaxyx()
+        self.dimensions = (y-3, x)
+        self.win = newwin(y-3, x, 2, 0)
+        self.screen = screen
+        self.screen.refresh()
 
-    def event_handler(self) -> None:
-        pass
+        # Settings
+        curs_set(0)
+        cbreak()
+        noecho()
+        self.screen.nodelay(False)
 
     def kill_pop_up(self) -> None:
-        pass
+        self.screen.nodelay(True)
+        del self.win
 
     # Read input
-    def get_input_checkboxes(self, options: list) -> list:
+    def get_input_checkboxes(self, options: list, message: str) -> list:
+        message = self.make_message_fit_width(message, self.dimensions[1]-2)
+        height_of_msg = len(message.splitlines())+1
+        self.win.addstr(1, 1, message)
+        self.win.box()
+        self.win.refresh()
+
+        scroll_y, scroll_x = 0, 0
+        pad = newpad(len(options)+1, max(len(i) for i in options)+5)
+
+        selected = [False] * len(options)
+        current_option = 0
+
+        def display_menu():
+            for idx, option in enumerate(options):
+                if idx == current_option: pad.attron(color_pair(2))
+                checkbox = "[X]" if selected[idx] else "[ ]"
+                pad.addstr(idx, 0, checkbox)
+                pad.addstr(idx, 4, option)
+                if idx == current_option: pad.attroff(color_pair(2))
+            bottom_right_y, bottom_right_x = height_of_msg+pad.getmaxyx()[0]+1, pad.getmaxyx()[1]+1
+            if height_of_msg+pad.getmaxyx()[0]+1 >= self.win.getmaxyx()[0]:
+                bottom_right_y = self.win.getmaxyx()[0]
+            if pad.getmaxyx()[1] >= self.win.getmaxyx()[1]-1:
+                bottom_right_x = self.win.getmaxyx()[1]-2
+            pad.refresh(scroll_y, scroll_x, height_of_msg+3, 1, bottom_right_y, bottom_right_x)
+
+        while True:
+            display_menu()
+            key = self.screen.getkey()
+
+            if key == "KEY_UP" and current_option > 0:
+                current_option -= 1
+                if current_option < scroll_y: scroll_y -= 1
+            elif key == "KEY_DOWN" and current_option < len(options) - 1:
+                current_option += 1
+                if current_option >= scroll_y + (self.win.getmaxyx()[0] - height_of_msg - 2): scroll_y += 1
+            elif key == "KEY_LEFT" and scroll_x > 0:
+                scroll_x -= 1
+            elif key == "KEY_RIGHT" and scroll_x < pad.getmaxyx()[1] - self.win.getmaxyx()[1] + 2:
+                scroll_x += 1
+            elif key == ' ':
+                selected[current_option] = not selected[current_option]
+            elif key == '\n':
+                break
+
+        self.kill_pop_up()
+        return [opt for idx, opt in enumerate(options) if selected[idx]]
+
+    def get_input_radio_btn(self, options: list, message: str) -> str:
         pass
 
-    def get_input_radio_btn(self, options: list) -> str:
-        pass
+    # Helper methods
+    def make_message_fit_width(self, message: str, width: int) -> str:
+        paras = ["dbc71b7fc9e348da85ae5e095bd80855" if i == "" else i for i in message.splitlines()] # using a uuid4 here to preserve the custom linespacing via `\n`
+        lines = [" "+j for i in paras for j in wrap(i,width)]
+        return "\n".join(["" if i==" dbc71b7fc9e348da85ae5e095bd80855" else i for i in lines])
 
 class Renderer:
     def __init__(self):
@@ -36,7 +97,7 @@ class Renderer:
                                   (y, x),
                                   (len(help_lines)+1, max(len(line) for line in help_lines)+1)]
         self.windows = [self.screen, # footer
-                        newpad(self.window_dimensions[1][0], self.window_dimensions[1][1]), # main todo
+                        newpad(self.window_dimensions[1][0], self.window_dimensions[1][1]), # main
                         newpad(self.window_dimensions[2][0], self.window_dimensions[2][1])] # help message popup
 
         self.scroll_y, self.scroll_x = 0, 0
@@ -143,7 +204,9 @@ class Renderer:
 
     # Implementations of the main procedures
     def search_procedure(self) -> None:
-        pass
+        popup = PopUp(self.screen)
+        input = popup.get_input_checkboxes(["Python", "Java", "Go", "C", "C++"], "What programming languages do you use?")
+        print(input)
 
     def add_procedure(self) -> None:
         pass
