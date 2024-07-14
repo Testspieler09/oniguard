@@ -2,7 +2,7 @@ from curses import newwin, newpad, initscr, init_pair, color_pair, start_color, 
 from re import match
 from textwrap import wrap
 from os import get_terminal_size
-from assets import HELP_MESSAGE, FOOTER_TEXT
+from assets import HELP_MESSAGE, FOOTER_TEXT, INSTRUCTIONS
 from time import sleep
 from logging import getLogger
 
@@ -79,7 +79,7 @@ class PopUp:
         self.kill_pop_up()
         return [opt for idx, opt in enumerate(options) if selected[idx]]
 
-    def get_input_radio_btn(self, options: list, message: str) -> str:
+    def get_input_radio_btn(self, options: list, message: str) -> tuple:
         message = self.make_message_fit_width(message, self.dimensions[1]-2)
         height_of_msg = len(message.splitlines())+1
         self.win.addstr(1, 0, message)
@@ -127,9 +127,9 @@ class PopUp:
                 break
 
         self.kill_pop_up()
-        return options[current_option]
+        return current_option, options[current_option]
 
-    def get_input_string(self, p_message: str, input_length: int, p_regex=None) -> str:
+    def get_input_string(self, p_message: str, p_regex=None) -> str:
         WRONG_INPUT_MESSAGE = "The provided input doesn't match the wanted pattern.\n\n"
         regex = r"[\S\s]*" if p_regex==None else p_regex
         message = self.make_message_fit_width(p_message, self.dimensions[1]-2)
@@ -145,7 +145,7 @@ class PopUp:
             self.win.addstr(1, 0, message)
             self.win.box()
             self.win.refresh()
-            input = self.win.getstr(height_of_msg, 1, input_length).decode('utf-8', 'backslashreplace')
+            input = self.win.getstr(height_of_msg, 1).decode('utf-8', 'backslashreplace')
 
             if match(regex, input):
                 break
@@ -153,6 +153,7 @@ class PopUp:
                 message_is_updated = True
                 message = self.make_message_fit_width(WRONG_INPUT_MESSAGE + p_message, self.dimensions[1]-2)
                 height_of_msg = len(message.splitlines())+1
+        self.kill_pop_up()
         return input
 
     # Helper methods
@@ -162,8 +163,9 @@ class PopUp:
         return "\n".join(["" if i==" dbc71b7fc9e348da85ae5e095bd80855" else i for i in lines])
 
 class Renderer:
-    def __init__(self):
+    def __init__(self, data_mng: object) -> None:
         self.screen = initscr()
+        self.data = data_mng
         self.running = True
 
         # DETERMINE THE SIZE OF THE MAIN PAD
@@ -256,10 +258,14 @@ class Renderer:
                 self.add_procedure()
             case "C" | "c":
                 self.change_procedure()
-            case "F" | "f":
-                self.filter_procedure()
             case "D" | "d":
                 self.delete_procedure()
+            case "F" | "f":
+                self.filter_procedure()
+            case "O" | "o":
+                self.order_procedure()
+            case "L" | "l":
+                self.lock_procedure()
             # Default operations
             case "H" | "h":
                 if self.active_window == 2:
@@ -284,15 +290,35 @@ class Renderer:
         pass
 
     def add_procedure(self) -> None:
-        pass
+        # get scheme_hash
+        schemes = self.data.get_schemes()
+        schemes.insert(0, "Cancel")
+        popup = PopUp(self.screen)
+        idx, _ = popup.get_input_radio_btn([str(i) for i in schemes], INSTRUCTIONS["add"])
+        if idx==0: return
+        scheme_hash = self.data.get_scheme_hash_by_scheme(schemes[idx])
+        # iterate over scheme and ask for entries
+        entry = []
+        for item in schemes[idx]:
+            popup = PopUp(self.screen)
+            input = popup.get_input_string(f"Provide a entry for the '{item}' column.\n")
+            entry.append(input)
+
+        self.data.add_entry(scheme_hash, entry)
 
     def change_procedure(self) -> None:
+        pass
+
+    def delete_procedure(self) -> None:
         pass
 
     def filter_procedure(self) -> None:
         pass
 
-    def delete_procedure(self) -> None:
+    def order_procedure(self) -> None:
+        pass
+
+    def lock_procedure(self) -> None:
         pass
 
     # Some getter methods
@@ -363,5 +389,19 @@ class Renderer:
             self.windows[win].refresh(self.scroll_x, self.scroll_y, start_x, start_y, end_x, end_y)
 
 if __name__ == "__main__":
-    renderer = Renderer()
-    print(renderer)
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    from base64 import urlsafe_b64encode
+    from Data_Manager import DataManager
+
+    with open("..\\userdata\\test\\.salt", "rb") as f:
+        salt = f.readline()
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=480000,
+    )
+    key = urlsafe_b64encode(kdf.derive(b"g"))
+    dm = DataManager("..\\userdata\\test\\test.data", key)
+    renderer = Renderer(dm)

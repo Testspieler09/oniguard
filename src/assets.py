@@ -29,4 +29,13 @@ HELP_MESSAGE="""
  Q -> [Q]uit program
 """
 
+DEFAULT_SCHEMES = {
+    "f4173947c70e4152a62582b1ca8a85db": ["Application", "Password", "Changedate", "Creationdate"],
+    "a4c831c95bf74283b28858835c253513": ["Application", "Verification through", "Email used", "Changedate", "Creationdate"]
+}
+
+INSTRUCTIONS = {
+    "add": "What scheme do you want to add the entry to?"
+}
+
 FOOTER_TEXT=["[H]elp", "[Q]uit"]

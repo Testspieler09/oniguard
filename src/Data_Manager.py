@@ -1,10 +1,16 @@
+# Security packets
 from secrets import choice
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.fernet import Fernet
-from uuid import id4
+# Other packets
+from base64 import urlsafe_b64encode
+from uuid import uuid4
 from datetime import datetime
 from string import ascii_letters, digits, punctuation
 from os.path import exists, join, splitext, split
 from json import loads
+from assets import DEFAULT_SCHEMES
 from logging import getLogger
 
 logger = getLogger(__name__)
@@ -13,7 +19,6 @@ class Cryptographer:
     def __init__(self, key: str) -> None:
         try:
             self.fernet = Fernet(key)
-            logger.info("Cryptographer initialized.")
         except Exception as e:
             logger.info("Keyfile doesn't exist or someting else went wrong. For more detail see the error below.")
             logger.critical(e)
@@ -54,10 +59,10 @@ class FileManager:
         """
         Alternative constructor for when the JSON file doesn't exist yet
         """
-        logger.info(path_with_filename_and_extension)
         crypt = Cryptographer(key)
+        default_content = f'{{"schemes": {DEFAULT_SCHEMES}, "entries": {{}}}}'
         with open(path_with_filename_and_extension, "wb") as f:
-            f.write(crypt.encrypt('{"schemes": {}, "entries": {}}'))
+            f.write(crypt.encrypt(str(default_content)))
         return
 
     def read_file_data(self) -> dict:
@@ -66,9 +71,9 @@ class FileManager:
         """
         with open(self.path_to_file, "r") as f:
             data = self.crypt.decrypt(f.readline())
-            if data != None: return loads(data)
+            if data != None: return loads(data.replace("'", '"'))
 
-        logger.info("Wrong password provided or something else went wrong.")
+        logger.critical("Wrong password provided or something else went wrong.")
         raise Exception("Wrong Password")
 
     def update_data(self, data: dict) -> None:
@@ -111,7 +116,7 @@ class DataManager(FileManager):
     """
     def __init__(self, path_to_file: str, key: str) -> None:
         super().__init__(path_to_file, key)
-        self.hidden_stats = ["changedate", "creationdate"]
+        self.hidden_stats = ["Changedate", "Creationdate"]
 
     @staticmethod
     def gen_hash() -> str:
@@ -134,6 +139,14 @@ class DataManager(FileManager):
             if entry["scheme_hash"] == scheme_hash: entries.update({key: entry})
         return entries
 
+    def get_scheme_hash_by_scheme(self, p_scheme: list) -> str:
+        for hash, scheme in self.data["schemes"].items():
+            if scheme[:-2] == p_scheme: return hash
+        logger.critical("Couldn't find a the provided scheme")
+
+    def get_schemes(self) -> list:
+        return [i[:-2] for i in self.data["schemes"].values()]
+
     # Add data
     def add_entry(self, scheme_hash: str, entry: list) -> None:
         data = {}
@@ -141,7 +154,7 @@ class DataManager(FileManager):
         entry.extend([now, now])
         data["scheme_hash"] = scheme_hash
         data["values"] = entry
-        self.data["entries"].update(data)
+        self.data["entries"].update({self.gen_hash(): data})
 
     def add_scheme(self, scheme: list) -> None:
         scheme.extend(self.hidden_stats)
@@ -208,6 +221,19 @@ def evaluate_password(password: str) -> str:
         return "medium"
     elif variaty == 4:
         return "good"
+
+
+def get_hashing_obj(salt: str) -> object:
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=480000,
+    )
+    return kdf
+
+def convert_pw_to_key(kdf: object, pw: str) -> str:
+    return urlsafe_b64encode(kdf.derive(pw.encode()))
 
 if __name__ == "__main__":
     for _ in range(5):

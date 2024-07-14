@@ -1,8 +1,5 @@
 # Security packets
 from getpass import getpass
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from base64 import urlsafe_b64encode
 # Other packets
 from os import get_terminal_size, mkdir, urandom
 from os.path import exists, join
@@ -10,22 +7,15 @@ from time import sleep
 from shutil import rmtree
 from sys import exit
 from assets import PROGRAM_NAME, DESCR
-from Data_Manager import DataManager, generate_password, evaluate_password
+from Data_Manager import DataManager, generate_password, evaluate_password, get_hashing_obj, convert_pw_to_key
+from Renderer import Renderer
+from logging import shutdown
 from LOGGER import setup_logger
 
 class OniManager:
     def __init__(self, data: dict) -> None:
         self.rank = data["rank"]
         self.score = data["score"]
-
-def get_hashing_obj(salt: str) -> object:
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=salt,
-        iterations=480000,
-    )
-    return kdf
 
 def ask_yes_no(message: str) -> bool:
     choice = ""
@@ -38,7 +28,7 @@ def ask_yes_no(message: str) -> bool:
     else:
         logger.critical("The ask yes no function is broken.")
 
-def login_procedure(folder_path_cross_platform: str) -> str:
+def login_procedure(folder_path_cross_platform: str) -> object | None:
     if not exists(folder_path_cross_platform):
         choice = ask_yes_no(f"Do you want to create a new user {args.username}?")
         if choice:
@@ -52,11 +42,13 @@ def login_procedure(folder_path_cross_platform: str) -> str:
             check_pw = getpass(f"Please repeat the password for {args.username}: ")
             if pw != check_pw:
                 print("The passwords are not identical.")
+                shutdown() # disconnect logger so we can delete folder with items
+                rmtree(folder_path_cross_platform)
                 exit()
             else:
                 DataManager(
                         join(folder_path_cross_platform, f"{args.username}.data"),
-                        urlsafe_b64encode(kdf.derive(pw.encode()))
+                        convert_pw_to_key(kdf, pw)
                 )
         else:
             exit()
@@ -65,11 +57,11 @@ def login_procedure(folder_path_cross_platform: str) -> str:
         kdf = get_hashing_obj(f.readline())
     password = getpass(f"Please provide the master password for {args.username}: ")
     try:
-        key = urlsafe_b64encode(kdf.derive(password.encode()))
-        DataManager(join(folder_path_cross_platform, f"{args.username}.data"), key)
+        key = convert_pw_to_key(kdf, password)
+        return DataManager(join(folder_path_cross_platform, f"{args.username}.data"), key)
     except:
         print("Password not correct")
-        sleep(5)
+    #     sleep(5)
         exit()
 
 def main(args: object) -> None:
@@ -83,7 +75,8 @@ def main(args: object) -> None:
             print(f"User {args.username} got removed")
         exit()
 
-    login_procedure(folder_path_cross_platform)
+    data_manager = login_procedure(folder_path_cross_platform)
+    Renderer(data_manager)
 
 if __name__ == "__main__":
     from argparse import ArgumentParser, RawDescriptionHelpFormatter
