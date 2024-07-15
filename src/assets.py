@@ -30,12 +30,16 @@ HELP_MESSAGE="""
 """
 
 DEFAULT_SCHEMES = {
-    "f4173947c70e4152a62582b1ca8a85db": ["Application", "Password", "Changedate", "Creationdate"],
-    "a4c831c95bf74283b28858835c253513": ["Application", "Verification through", "Email used", "Changedate", "Creationdate"]
+    "f4173947c70e4152a62582b1ca8a85db": [["Application", "None"], ["Password", "Password"], ["Changedate", "Hidden"], ["Creationdate", "Hidden"]],
+    "a4c831c95bf74283b28858835c253513": [["Application", "None"], ["Verification through", "None"], ["Email used", "Truncate"], ["Changedate", "Hidden"], ["Creationdate", "Hidden"]]
 }
 
 INSTRUCTIONS = {
     "add": "What scheme do you want to add the entry to?"
 }
 
+CONSTRAINTS = ["None", "Password", "Truncate", "Hidden"]
+
 FOOTER_TEXT=["[H]elp", "[Q]uit"]
+
+NAME_REGEX = r"^[\S\s]+$"

@@ -116,7 +116,7 @@ class DataManager(FileManager):
     """
     def __init__(self, path_to_file: str, key: str) -> None:
         super().__init__(path_to_file, key)
-        self.hidden_stats = ["Changedate", "Creationdate"]
+        self.hidden_stats = [["Changedate", "Hidden"], ["Creationdate", "Hidden"]]
 
     @staticmethod
     def gen_hash() -> str:

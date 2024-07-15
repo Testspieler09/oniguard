@@ -2,7 +2,7 @@ from curses import newwin, newpad, initscr, init_pair, color_pair, start_color, 
 from re import match
 from textwrap import wrap
 from os import get_terminal_size
-from assets import HELP_MESSAGE, FOOTER_TEXT, INSTRUCTIONS
+from assets import HELP_MESSAGE, FOOTER_TEXT, INSTRUCTIONS, CONSTRAINTS, NAME_REGEX
 from time import sleep
 from logging import getLogger
 
@@ -77,7 +77,7 @@ class PopUp:
                 break
 
         self.kill_pop_up()
-        return [opt for idx, opt in enumerate(options) if selected[idx]]
+        return [idx for idx, value in enumerate(selected) if value], [opt for idx, opt in enumerate(options) if selected[idx]]
 
     def get_input_radio_btn(self, options: list, message: str) -> tuple:
         message = self.make_message_fit_width(message, self.dimensions[1]-2)
@@ -290,21 +290,44 @@ class Renderer:
         pass
 
     def add_procedure(self) -> None:
-        # get scheme_hash
-        schemes = self.data.get_schemes()
-        schemes.insert(0, "Cancel")
         popup = PopUp(self.screen)
-        idx, _ = popup.get_input_radio_btn([str(i) for i in schemes], INSTRUCTIONS["add"])
-        if idx==0: return
-        scheme_hash = self.data.get_scheme_hash_by_scheme(schemes[idx])
-        # iterate over scheme and ask for entries
-        entry = []
-        for item in schemes[idx]:
-            popup = PopUp(self.screen)
-            input = popup.get_input_string(f"Provide a entry for the '{item}' column.\n")
-            entry.append(input)
+        _, input = popup.get_input_radio_btn(["Scheme", "Entry"], "What do you want to add?")
+        match input:
+            case "Scheme":
+                data = []
+                while True:
+                    _, action = PopUp(self.screen).get_input_radio_btn(["Stop", "Add column", "Remove column"], f"What do you want to do?\nScheme: {data}")
+                    match action:
+                        case "Stop":
+                            break
+                        case "Add column":
+                            name = PopUp(self.screen).get_input_string("Please provide a name for the column.", NAME_REGEX)
+                            _, constraint = PopUp(self.screen).get_input_radio_btn(CONSTRAINTS, "What constraint would you like to add.")
+                            if not [name, constraint] in data: data.append([name, constraint])
+                        case "Remove column":
+                            if data == []:
+                                PopUp(self.screen).get_input_string("There are no columns yet. Press `Enter` to continue.")
+                                continue
+                            idx, _ = PopUp(self.screen).get_input_checkboxes([str(i) for i in data], "Which columns do you want to remove?")
+                            for i in idx:
+                                data.remove(data[i])
+                if data != []: self.data.add_scheme(data)
+            case "Entry":
+                # get scheme_hash
+                schemes = self.data.get_schemes()
+                schemes.insert(0, "Cancel")
+                popup = PopUp(self.screen)
+                idx, _ = popup.get_input_radio_btn([str(i) for i in schemes], INSTRUCTIONS["add"])
+                if idx==0: return
+                scheme_hash = self.data.get_scheme_hash_by_scheme(schemes[idx])
+                # iterate over scheme and ask for entries
+                entry = []
+                for item in schemes[idx]:
+                    popup = PopUp(self.screen)
+                    input = popup.get_input_string(f"Provide a entry for the '{item[0]}' column.\n", NAME_REGEX)
+                    entry.append(input)
 
-        self.data.add_entry(scheme_hash, entry)
+                self.data.add_entry(scheme_hash, entry)
 
     def change_procedure(self) -> None:
         pass
