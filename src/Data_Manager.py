@@ -10,6 +10,7 @@ from datetime import datetime
 from string import ascii_letters, digits, punctuation
 from os.path import exists, join, splitext, split
 from json import loads
+from prettytable import PrettyTable
 from assets import DEFAULT_SCHEMES
 from logging import getLogger
 
@@ -60,7 +61,7 @@ class FileManager:
         Alternative constructor for when the JSON file doesn't exist yet
         """
         crypt = Cryptographer(key)
-        default_content = f'{{"schemes": {DEFAULT_SCHEMES}, "entries": {{}}}}'
+        default_content = f'{{"settings":{{"dates_hidden":[True, True]}},"schemes": {DEFAULT_SCHEMES}, "entries": {{}}}}'
         with open(path_with_filename_and_extension, "wb") as f:
             f.write(crypt.encrypt(str(default_content)))
         return
@@ -109,7 +110,7 @@ class DataManager(FileManager):
         "entries": {
             "hash": {
                 "scheme_hash": str,
-                "values": list
+                "values": list[str]
             }
         }
     }
@@ -127,7 +128,17 @@ class DataManager(FileManager):
         """
         For display purposes
         """
-        return dict(sorted(x.items(), key=lambda item: item[1]["scheme_hash"]))
+        sorted_data = dict(sorted(data.items(), key=lambda item: item[1]["scheme_hash"]))
+        first_time = True
+        scheme_hashes, data = [], []
+        for hash, values in sorted_data.items():
+            if first_time or values["scheme_hash"] != scheme_hashes[-1]:
+                first_time = False
+                scheme_hashes.append(values["scheme_hash"])
+                data.append([[hash, values["values"]]])
+            else:
+                data[-1].append([hash, values["values"]])
+        return scheme_hashes, data
 
     # Getter methods
     def get_all_entries(self) -> dict:
@@ -189,11 +200,58 @@ class DataManager(FileManager):
         del self.data["schemes"][scheme_hash]
 
     # Output methods
-    def beautify_output(self) -> list[str]:
+    def apply_settings_to_hidden_dates(self, data: list, is_table_header=False) -> list:
+        if is_table_header:
+            idx = sorted((num for num, i in enumerate(data) if i[1]=="Hidden"), reverse=True)
+            for i in idx:
+                data.pop(i)
+        if all(self.data["settings"]["dates_hidden"]):
+            return data[:-2]
+        elif not any(self.data["settings"]["dates_hidden"]):
+            return data
+        elif self.data["settings"]["dates_hidden"][0]:
+            data.pop(-2)
+            return data
+        else:
+            return data[:-1]
+
+    @staticmethod
+    def apply_constraints_to_data(data: list) -> list:
+        hidden_items = []
+        for num, zip_item_constraint in enumerate(data[:-2]):
+            match zip_item_constraint[1]:
+                case "None":
+                    continue
+                case "Hidden":
+                    hidden_items.append(num)
+                case "Truncate":
+                    length_item = len(zip_item_constraint[0])
+                    idx = range(int(length_item//2-0.25*length_item), int(length_item//2+0.3*length_item))
+                    data[num] = "".join(value if not i in idx else "*" for i, value in enumerate(zip_item_constraint[0])), zip_item_constraint[1]
+                case "Password":
+                    data[num] = "*"*8, zip_item_constraint[1]
+        for i in sorted(hidden_items, reverse=True):
+            data.pop(i)
+        return data
+
+
+    def beautify_output(self, data: dict) -> list[str]:
         """
         if multiple schemes display them below each other
         """
-        pass
+        output = ""
+        scheme_hashes, entries = self.group_data_by_schemes(data)
+        for i, scheme in enumerate(scheme_hashes):
+            table = PrettyTable()
+            # hide or unhide the date stuff
+            table.field_names = self.apply_settings_to_hidden_dates([i[0] for i in self.data["schemes"][scheme]], True)
+
+            for entry in entries[i]:
+                # prepare data based on constraints
+                modified_entry = self.apply_constraints_to_data(list(zip(entry[1], (i[1] for i in self.data["schemes"][scheme]))))
+                table.add_row(self.apply_settings_to_hidden_dates(modified_entry))
+            output += f"{table.__str__()}\n\n"
+        return output if output != "" else "You have no entries to display yet. Add one with [A]."
 
 # SOME FUNCTIONS REGARDING PASSWORD STUFF
 def generate_password(length: int) -> str:
@@ -216,11 +274,11 @@ def evaluate_password(password: str) -> str:
               + element_is_in_password(punctuation)
 
     if length < 8 or variaty <= 2:
-        return "bad"
+        return "BAD"
     elif variaty == 3:
-        return "medium"
+        return "OKAY"
     elif variaty == 4:
-        return "good"
+        return "EXCELLENT"
 
 
 def get_hashing_obj(salt: str) -> object:

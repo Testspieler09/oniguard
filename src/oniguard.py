@@ -7,7 +7,7 @@ from time import sleep
 from shutil import rmtree
 from sys import exit
 from assets import PROGRAM_NAME, DESCR
-from Data_Manager import DataManager, generate_password, evaluate_password, get_hashing_obj, convert_pw_to_key
+from Data_Manager import DataManager, get_hashing_obj, convert_pw_to_key
 from Renderer import Renderer
 from logging import shutdown
 from LOGGER import setup_logger

@@ -2,6 +2,7 @@ from curses import newwin, newpad, initscr, init_pair, color_pair, start_color, 
 from re import match
 from textwrap import wrap
 from os import get_terminal_size
+from Data_Manager import generate_password, evaluate_password
 from assets import HELP_MESSAGE, FOOTER_TEXT, INSTRUCTIONS, CONSTRAINTS, NAME_REGEX
 from time import sleep
 from logging import getLogger
@@ -296,7 +297,7 @@ class Renderer:
             case "Scheme":
                 data = []
                 while True:
-                    _, action = PopUp(self.screen).get_input_radio_btn(["Stop", "Add column", "Remove column"], f"What do you want to do?\nScheme: {data}")
+                    _, action = PopUp(self.screen).get_input_radio_btn(["Add column", "Remove column", "Stop"], f"What do you want to do?\nScheme: {data}")
                     match action:
                         case "Stop":
                             break
@@ -309,7 +310,7 @@ class Renderer:
                                 PopUp(self.screen).get_input_string("There are no columns yet. Press `Enter` to continue.")
                                 continue
                             idx, _ = PopUp(self.screen).get_input_checkboxes([str(i) for i in data], "Which columns do you want to remove?")
-                            for i in idx:
+                            for i in sorted(idx, reverse=True):
                                 data.remove(data[i])
                 if data != []: self.data.add_scheme(data)
             case "Entry":
@@ -324,9 +325,20 @@ class Renderer:
                 entry = []
                 for item in schemes[idx]:
                     popup = PopUp(self.screen)
-                    input = popup.get_input_string(f"Provide a entry for the '{item[0]}' column.\n", NAME_REGEX)
+                    if item[1] != "Password":
+                        input = popup.get_input_string(f"Provide a entry for the '{item[0]}' column.\n", NAME_REGEX)
+                    else:
+                        idx, _ = popup.get_input_radio_btn(["generate password", "input it manually"], "What do you want to do?")
+                        if idx==0:
+                            length = PopUp(self.screen).get_input_string("How long is the password supposed to be?", r"^\d+$")
+                            input = generate_password(int(length))
+                        else:
+                            while True:
+                                input = popup.get_input_string(f"Provide a entry for the '{item[0]}' column.\n", NAME_REGEX)
+                                rating = evaluate_password(input)
+                                idx, _ = PopUp(self.screen).get_input_radio_btn(["Continue", "New password"], f"Your password has a security rating of {rating}.")
+                                if idx==0: break
                     entry.append(input)
-
                 self.data.add_entry(scheme_hash, entry)
 
     def change_procedure(self) -> None:
