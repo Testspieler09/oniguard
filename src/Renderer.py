@@ -164,7 +164,7 @@ class PopUp:
         return "\n".join(["" if i==" dbc71b7fc9e348da85ae5e095bd80855" else i for i in lines])
 
 class Renderer:
-    def __init__(self, data_mng: object) -> None:
+    def __init__(self, data_mng: object, content=None, beautified_content=None, pointer_idx=None) -> None:
         self.screen = initscr()
         self.data = data_mng
         self.running = True
@@ -185,6 +185,9 @@ class Renderer:
         self.main_start_x_y = (2, 0)
         self.main_end_x_y = (self.window_dimensions[0][0]-2, self.window_dimensions[0][1]-1)
         self.active_window = 1
+        self.content = self.data.get_all_entries() if content==None else content
+        self.beautified_content = self.data.beautify_output(self.data.get_all_entries()) if beautified_content==None else beautified_content
+        self.pointer_idx = [None, self.data.get_idx_of_entries()] if pointer_idx==None else pointer_idx
 
         # COLOR STUFF FOR IMPORTANCE
         start_color()
@@ -219,7 +222,7 @@ class Renderer:
         self.output_text_to_window(0, self.space_footer_text(FOOTER_TEXT), self.window_dimensions[0][0]-1, 0)
         y, _ = self.get_coordinates_for_centered_text(headline)
         self.output_text_to_window(0, headline, 1, y, A_UNDERLINE)
-        # self.beautify_output()
+        self.update_scr()
         while self.running:
             sleep(0.01) # so program doesn't use 100% cpu
             key=self.get_input()
@@ -232,6 +235,7 @@ class Renderer:
     def event_handler(self, event: str) -> None:
         match event:
             # Scroll operations
+            # ADJUST SCROLL logic based on pointer
             case "KEY_DOWN":
                 if abs(self.scroll_x - self.window_dimensions[self.active_window][0]-3) <= self.window_dimensions[0][0]:
                     return
@@ -257,16 +261,18 @@ class Renderer:
                 self.search_procedure()
             case "A" | "a":
                 self.add_procedure()
-            case "C" | "c":
-                self.change_procedure()
-            case "D" | "d":
-                self.delete_procedure()
             case "F" | "f":
+                # filter schemes and date stats
                 self.filter_procedure()
             case "O" | "o":
+                # order by any column in table pointer is at (if multiple shown)
                 self.order_procedure()
             case "L" | "l":
+                # enter lockscreen for -> masterpassword to reenter
                 self.lock_procedure()
+            case "\n":
+                # do something to the item the pointer is on (change, delete)
+                self.on_item_procedure()
             # Default operations
             case "H" | "h":
                 if self.active_window == 2:
@@ -284,7 +290,7 @@ class Renderer:
                 self.kill_scr()
             case "KEY_RESIZE":
                 self.kill_scr()
-                ScreenManager()
+                ScreenManager(self.content, self.beautified_content)
 
     # Implementations of the main procedures
     def search_procedure(self) -> None:
@@ -340,6 +346,8 @@ class Renderer:
                                 if idx==0: break
                     entry.append(input)
                 self.data.add_entry(scheme_hash, entry)
+        self.update_contents(self.data.get_all_entries())
+        self.update_scr()
 
     def change_procedure(self) -> None:
         pass
@@ -356,13 +364,39 @@ class Renderer:
     def lock_procedure(self) -> None:
         pass
 
+    def on_item_procedure(self) -> None:
+        if self.pointer_idx[0] == None: return
+
+    # update methods
+    def update_contents(self, new_content: dict) -> None:
+        self.content = new_content
+        self.beautified_content = self.data.beautify_output(self.content)
+        self.pointer_idx = [self.pointer_idx[0], self.data.get_idx_of_entries()]
+
+    def update_scr(self, start_y=1, start_x=0) -> None:
+        """
+        Updates the main screen, which displays the tables
+        """
+        self.windows[1].clear()
+        if len(self.beautified_content.splitlines())==1:
+            self.output_text_to_window(1, " " + self.beautified_content, start_y, start_x)
+            return
+        for idx, line in enumerate(self.beautified_content.splitlines()):
+            if idx == self.pointer_idx[0] and self.pointer_idx[0] != None:
+                line = " > " + line
+                self.output_text_to_window(1, line, start_y, start_x, color_pair(2))
+            else:
+                line = "   " + line
+                self.output_text_to_window(1, line, start_y, start_x)
+            start_y += 1
+
     # Some getter methods
     def get_main_dimensions(self) -> tuple:
-        # try:
-        #     max_dimensions = self.data.get_longest_entry_beautified()
-        # except ValueError:
-        y, x = self.screen.getmaxyx()
-        return y-3, x
+        try:
+            max_dimensions = self.data.get_longest_entry_beautified()
+        except ValueError:
+            y, x = self.screen.getmaxyx()
+            return y-3, x
         if max_dimensions[0]+2 > self.screen.getmaxyx()[0]-3:
             y = max_dimensions[0]+2
         else:

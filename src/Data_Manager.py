@@ -61,9 +61,9 @@ class FileManager:
         Alternative constructor for when the JSON file doesn't exist yet
         """
         crypt = Cryptographer(key)
-        default_content = f'{{"settings":{{"dates_hidden":[True, True]}},"schemes": {DEFAULT_SCHEMES}, "entries": {{}}}}'
+        default_content = f'{{"settings":{{"dates_hidden":[true, true]}},"schemes": {DEFAULT_SCHEMES}, "entries": {{}}}}'
         with open(path_with_filename_and_extension, "wb") as f:
-            f.write(crypt.encrypt(str(default_content)))
+            f.write(crypt.encrypt(default_content))
         return
 
     def read_file_data(self) -> dict:
@@ -118,6 +118,7 @@ class DataManager(FileManager):
     def __init__(self, path_to_file: str, key: str) -> None:
         super().__init__(path_to_file, key)
         self.hidden_stats = [["Changedate", "Hidden"], ["Creationdate", "Hidden"]]
+        self.current_data = self.data["entries"]
 
     @staticmethod
     def gen_hash() -> str:
@@ -157,6 +158,27 @@ class DataManager(FileManager):
 
     def get_schemes(self) -> list:
         return [i[:-2] for i in self.data["schemes"].values()]
+
+    def get_longest_entry_beautified(self) -> tuple:
+        data = self.beautify_output(self.get_all_entries()).splitlines()
+        y, x = len(data), max(len(i) for i in data)
+        return y, x
+
+    def get_idx_of_entries(self) -> list[int]:
+        HEADER_SIZE, SPACE_BETWEEN_TABLES, SPACE_BETWEEN_ENTRIES = 4, 2, 1
+        sorted_data = self.group_data_by_schemes(self.current_data)
+        idx = []
+        counter = 0
+        for i in range(len(sorted_data[1])):
+            if counter != 0:
+                counter += SPACE_BETWEEN_TABLES
+            counter += HEADER_SIZE
+            idx.append(counter)
+            for j in range(len(sorted_data[1][i])-1):
+                counter += SPACE_BETWEEN_ENTRIES
+                idx.append(counter)
+        print(idx)
+        return idx
 
     # Add data
     def add_entry(self, scheme_hash: str, entry: list) -> None:
@@ -202,18 +224,18 @@ class DataManager(FileManager):
     # Output methods
     def apply_settings_to_hidden_dates(self, data: list, is_table_header=False) -> list:
         if is_table_header:
-            idx = sorted((num for num, i in enumerate(data) if i[1]=="Hidden"), reverse=True)
+            idx = sorted((num for num, i in enumerate(data[:-2]) if i[1]=="Hidden"), reverse=True)
             for i in idx:
                 data.pop(i)
         if all(self.data["settings"]["dates_hidden"]):
-            return data[:-2]
+            data = data[:-2]
         elif not any(self.data["settings"]["dates_hidden"]):
-            return data
+            pass
         elif self.data["settings"]["dates_hidden"][0]:
-            data.pop(-2)
-            return data
+            data = data.pop(-2)
         else:
-            return data[:-1]
+            data = data[:-1]
+        return [i[0] for i in data]
 
     @staticmethod
     def apply_constraints_to_data(data: list) -> list:
@@ -239,12 +261,13 @@ class DataManager(FileManager):
         """
         if multiple schemes display them below each other
         """
+        self.current_data = data
         output = ""
         scheme_hashes, entries = self.group_data_by_schemes(data)
         for i, scheme in enumerate(scheme_hashes):
             table = PrettyTable()
             # hide or unhide the date stuff
-            table.field_names = self.apply_settings_to_hidden_dates([i[0] for i in self.data["schemes"][scheme]], True)
+            table.field_names = self.apply_settings_to_hidden_dates(self.data["schemes"][scheme], True)
 
             for entry in entries[i]:
                 # prepare data based on constraints
