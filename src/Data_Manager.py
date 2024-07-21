@@ -118,7 +118,7 @@ class DataManager(FileManager):
     def __init__(self, path_to_file: str, key: str) -> None:
         super().__init__(path_to_file, key)
         self.hidden_stats = [["Changedate", "Hidden"], ["Creationdate", "Hidden"]]
-        self.current_data = self.data["entries"]
+        self.current_data = None
 
     @staticmethod
     def gen_hash() -> str:
@@ -161,23 +161,22 @@ class DataManager(FileManager):
 
     def get_longest_entry_beautified(self) -> tuple:
         data = self.beautify_output(self.get_all_entries()).splitlines()
-        y, x = len(data), max(len(i) for i in data)
+        y, x = len(data)-1, max(len(i) for i in data)+2
         return y, x
 
     def get_idx_of_entries(self) -> list[int]:
+        if self.current_data == None: return []
         HEADER_SIZE, SPACE_BETWEEN_TABLES, SPACE_BETWEEN_ENTRIES = 4, 2, 1
-        sorted_data = self.group_data_by_schemes(self.current_data)
         idx = []
-        counter = 0
-        for i in range(len(sorted_data[1])):
-            if counter != 0:
+        counter = -1
+        for i in range(len(self.current_data)):
+            if counter != -1:
                 counter += SPACE_BETWEEN_TABLES
             counter += HEADER_SIZE
             idx.append(counter)
-            for j in range(len(sorted_data[1][i])-1):
+            for j in range(len(self.current_data[i])-1):
                 counter += SPACE_BETWEEN_ENTRIES
                 idx.append(counter)
-        print(idx)
         return idx
 
     # Add data
@@ -261,9 +260,9 @@ class DataManager(FileManager):
         """
         if multiple schemes display them below each other
         """
-        self.current_data = data
         output = ""
         scheme_hashes, entries = self.group_data_by_schemes(data)
+        self.current_data = entries
         for i, scheme in enumerate(scheme_hashes):
             table = PrettyTable()
             # hide or unhide the date stuff

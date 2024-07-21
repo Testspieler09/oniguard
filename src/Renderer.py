@@ -180,14 +180,14 @@ class Renderer:
                         newpad(self.window_dimensions[1][0], self.window_dimensions[1][1]), # main
                         newpad(self.window_dimensions[2][0], self.window_dimensions[2][1])] # help message popup
 
-        self.scroll_y, self.scroll_x = 0, 0
+        self.scroll_x, self.scroll_y = 0, 0
         self.last_scroll_pos_main_scr = (0, 0)
-        self.main_start_x_y = (2, 0)
-        self.main_end_x_y = (self.window_dimensions[0][0]-2, self.window_dimensions[0][1]-1)
+        self.main_start_y_x = (2, 0)
+        self.main_end_y_x = (self.window_dimensions[0][0]-2, self.window_dimensions[0][1]-1)
         self.active_window = 1
         self.content = self.data.get_all_entries() if content==None else content
         self.beautified_content = self.data.beautify_output(self.data.get_all_entries()) if beautified_content==None else beautified_content
-        self.pointer_idx = [None, self.data.get_idx_of_entries()] if pointer_idx==None else pointer_idx
+        self.pointer_idx = [3, self.data.get_idx_of_entries()] if pointer_idx==None else pointer_idx
 
         # COLOR STUFF FOR IMPORTANCE
         start_color()
@@ -230,67 +230,89 @@ class Renderer:
 
     def scroll_pad(self, pad_id: int) -> None:
         start_x, start_y, end_x, end_y = self.get_coordinates_for_centered_pad(pad_id)
-        self.windows[pad_id].refresh(self.scroll_x, self.scroll_y, start_x, start_y, end_x, end_y)
+        self.windows[pad_id].refresh(self.scroll_y, self.scroll_x, start_x, start_y, end_x, end_y)
 
     def event_handler(self, event: str) -> None:
         match event:
             # Scroll operations
-            # ADJUST SCROLL logic based on pointer
             case "KEY_DOWN":
-                if abs(self.scroll_x - self.window_dimensions[self.active_window][0]-3) <= self.window_dimensions[0][0]:
+                try:
+                    length_idx, current_idx = len(self.pointer_idx[1])-1, self.pointer_idx[1].index(self.pointer_idx[0])
+                    if current_idx+1 > length_idx: raise ValueError
+                    self.pointer_idx[0] = self.pointer_idx[1][current_idx+1]
+                    self.update_scr()
+                    if abs(self.scroll_y - self.window_dimensions[self.active_window][0]-3) <= self.window_dimensions[0][0]: return
+                    if self.pointer_idx[1][current_idx+1]-1!=self.pointer_idx[1][current_idx] \
+                    and self.window_dimensions[0][0]-3<=self.pointer_idx[0]-self.scroll_y:
+                        self.scroll_y += 5
+                    else:
+                        self.scroll_y += 1
+                except ValueError:
+                    if abs(self.scroll_y - self.window_dimensions[self.active_window][0]-3) <= self.window_dimensions[0][0]: return
+                    self.scroll_y += 1
+                self.scroll_pad(self.active_window)
+            case "KEY_UP":
+                try:
+                    length_idx, current_idx = len(self.pointer_idx[1])-1, self.pointer_idx[1].index(self.pointer_idx[0])
+                    if current_idx-1 < 0: raise ValueError
+                    self.pointer_idx[0] = self.pointer_idx[1][current_idx-1]
+                    self.update_scr()
+                    self.scroll_y -= 1 if self.pointer_idx[1][current_idx]==self.pointer_idx[1][current_idx-1]+1 else 5
+                except ValueError:
+                    self.scroll_y -= 1
+                    if self.scroll_y <= 0: self.scroll_y = 0
+                self.scroll_pad(self.active_window)
+            case "KEY_RIGHT":
+                if abs(self.scroll_x - self.window_dimensions[self.active_window][1]) <= self.window_dimensions[0][1]:
                     return
                 self.scroll_x += 1
                 self.scroll_pad(self.active_window)
-            case "KEY_UP":
+            case "KEY_LEFT":
                 self.scroll_x -= 1
                 if self.scroll_x <= 0:
                     self.scroll_x = 0
                 self.scroll_pad(self.active_window)
-            case "KEY_RIGHT":
-                if abs(self.scroll_y - self.window_dimensions[self.active_window][1]) <= self.window_dimensions[0][1]:
-                    return
-                self.scroll_y += 1
-                self.scroll_pad(self.active_window)
-            case "KEY_LEFT":
-                self.scroll_y -= 1
-                if self.scroll_y <= 0:
-                    self.scroll_y = 0
-                self.scroll_pad(self.active_window)
             # Main operations
             case "S" | "s":
+                if self.active_window == 2: return
                 self.search_procedure()
             case "A" | "a":
+                if self.active_window == 2: return
                 self.add_procedure()
             case "F" | "f":
                 # filter schemes and date stats
+                if self.active_window == 2: return
                 self.filter_procedure()
             case "O" | "o":
                 # order by any column in table pointer is at (if multiple shown)
+                if self.active_window == 2: return
                 self.order_procedure()
             case "L" | "l":
                 # enter lockscreen for -> masterpassword to reenter
+                if self.active_window == 2: return
                 self.lock_procedure()
             case "\n":
                 # do something to the item the pointer is on (change, delete)
+                if self.active_window == 2: return
                 self.on_item_procedure()
             # Default operations
             case "H" | "h":
                 if self.active_window == 2:
                     self.active_window = 1
-                    self.scroll_x, self.scroll_y = self.last_scroll_pos_main_scr
-                    self.windows[1].refresh(self.scroll_x, self.scroll_y,
-                                            self.main_start_x_y[0], self.main_start_x_y[1],
-                                            self.main_end_x_y[0], self.main_end_x_y[1])
+                    self.scroll_y, self.scroll_x = self.last_scroll_pos_main_scr
+                    self.windows[1].refresh(self.scroll_y, self.scroll_x,
+                                            self.main_start_y_x[0], self.main_start_y_x[1],
+                                            self.main_end_y_x[0], self.main_end_y_x[1])
                 else:
                     self.active_window = 2
-                    self.last_scroll_pos_main_scr = (self.scroll_x, self.scroll_y)
-                    self.scroll_x, self.scroll_y = 0, 0
+                    self.last_scroll_pos_main_scr = (self.scroll_y, self.scroll_x)
+                    self.scroll_y, self.scroll_x = 0, 0
                     self.output_text_to_window(2, HELP_MESSAGE, 0, 0)
             case "Q" | "q":
                 self.kill_scr()
             case "KEY_RESIZE":
                 self.kill_scr()
-                ScreenManager(self.content, self.beautified_content)
+                Renderer(self.data, self.content, self.beautified_content)
 
     # Implementations of the main procedures
     def search_procedure(self) -> None:
@@ -325,7 +347,9 @@ class Renderer:
                 schemes.insert(0, "Cancel")
                 popup = PopUp(self.screen)
                 idx, _ = popup.get_input_radio_btn([str(i) for i in schemes], INSTRUCTIONS["add"])
-                if idx==0: return
+                if idx==0:
+                    self.update_scr()
+                    return
                 scheme_hash = self.data.get_scheme_hash_by_scheme(schemes[idx])
                 # iterate over scheme and ask for entries
                 entry = []
@@ -347,6 +371,7 @@ class Renderer:
                     entry.append(input)
                 self.data.add_entry(scheme_hash, entry)
         self.update_contents(self.data.get_all_entries())
+        self.update_main_dimensions()
         self.update_scr()
 
     def change_procedure(self) -> None:
@@ -365,19 +390,27 @@ class Renderer:
         pass
 
     def on_item_procedure(self) -> None:
-        if self.pointer_idx[0] == None: return
+        pass
 
     # update methods
+    def update_main_dimensions(self) -> None:
+        y, x = self.get_main_dimensions()
+        del self.window_dimensions[1]
+        self.window_dimensions.insert(1, (y, x))
+        del self.windows[1]
+        self.windows.insert(1, newpad(self.window_dimensions[1][0], self.window_dimensions[1][1]))
+
     def update_contents(self, new_content: dict) -> None:
         self.content = new_content
         self.beautified_content = self.data.beautify_output(self.content)
-        self.pointer_idx = [self.pointer_idx[0], self.data.get_idx_of_entries()]
+        self.scroll_y, self.scroll_x = 0, 0
+        self.pointer_idx = [3, self.data.get_idx_of_entries()]
 
     def update_scr(self, start_y=1, start_x=0) -> None:
         """
         Updates the main screen, which displays the tables
         """
-        self.windows[1].clear()
+        self.windows[1].clrtoeol()
         if len(self.beautified_content.splitlines())==1:
             self.output_text_to_window(1, " " + self.beautified_content, start_y, start_x)
             return
@@ -425,7 +458,7 @@ class Renderer:
         Should only center pop-ups like the help one
         """
         start_coords = [2, 0]
-        end_coords = list(self.main_end_x_y)
+        end_coords = list(self.main_end_y_x)
         if self.window_dimensions[0][0]-3 > self.window_dimensions[win][0]:
             start_coords[0] = (self.window_dimensions[0][0]-1)//2 - self.window_dimensions[win][0]//2 + start_coords[0]
             end_coords[0] = start_coords[0] + self.window_dimensions[win][0]
@@ -455,7 +488,7 @@ class Renderer:
         except Exception:
             self.windows[win].box()
             start_x, start_y, end_x, end_y = self.get_coordinates_for_centered_pad(win)
-            self.windows[win].refresh(self.scroll_x, self.scroll_y, start_x, start_y, end_x, end_y)
+            self.windows[win].refresh(self.scroll_y, self.scroll_x, start_x, start_y, end_x, end_y)
 
 if __name__ == "__main__":
     from cryptography.hazmat.primitives import hashes
