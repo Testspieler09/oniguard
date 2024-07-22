@@ -1,5 +1,6 @@
 from selenium import webdriver
 
+
 class Auto_Login:
 
     def __init__(self, url: str, credentials: dict) -> None:
@@ -15,7 +16,7 @@ class Auto_Login:
         # logic here
         return True
 
-    def auto_login(self)-> None:
+    def auto_login(self) -> None:
         # define common names or ids for input and submit fields
         # keywords_inputs = []
         # keywords_submit_button = []
@@ -26,17 +27,22 @@ class Auto_Login:
         # driver.find_element("id", "loginFormLogin")
         pass
 
+
 if __name__ == "__main__":
     from argparse import ArgumentParser
 
-    parser = ArgumentParser(prog="Auto Login",
-                            description="Login to any website automatically. Currently only works with Firefox.",
-                            epilog="The programm isn't perfect")
+    parser = ArgumentParser(
+        prog="Auto Login",
+        description="Login to any website automatically. Currently only works with Firefox.",
+        epilog="The programm isn't perfect",
+    )
 
     parser.add_argument("URL", type=str, help="The website to log into.")
     parser.add_argument("credentials", help="The name/email and password.")
 
     # args = parser.parse_args()
 
-    l = Auto_Login("https://login.bwinf.de", {"password": "helloworld", "name": "testuser69"})
+    l = Auto_Login(
+        "https://login.bwinf.de", {"password": "helloworld", "name": "testuser69"}
+    )
     print(l)
