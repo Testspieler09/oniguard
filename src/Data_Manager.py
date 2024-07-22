@@ -179,6 +179,22 @@ class DataManager(FileManager):
                 idx.append(counter)
         return idx
 
+    def get_entry_hash_by_pointer_idx(self, pointer_idx: int) -> str | None:
+        try:
+            idx = pointer_idx[1].index(pointer_idx[0])
+            joined_list = [i[0] for j in self.current_data for i in j]
+            return joined_list[idx]
+        except ValueError:
+            return
+
+    def get_pointer_idx_by_hash(self, entry_hash: str, pointer_idx: list) -> int:
+        joined_list = [i[0] for j in self.current_data for i in j]
+        try:
+            idx = joined_list.index(entry_hash)
+            return pointer_idx[idx]
+        except ValueError:
+            raise Exception("Something went wrong")
+
     # Add data
     def add_entry(self, scheme_hash: str, entry: list) -> None:
         data = {}

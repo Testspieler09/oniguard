@@ -180,14 +180,15 @@ class Renderer:
                         newpad(self.window_dimensions[1][0], self.window_dimensions[1][1]), # main
                         newpad(self.window_dimensions[2][0], self.window_dimensions[2][1])] # help message popup
 
-        self.scroll_x, self.scroll_y = 0, 0
+        self.pointer_idx = [3, self.data.get_idx_of_entries()] if pointer_idx==None else pointer_idx
+        self.scroll_y, self.scroll_x = self.pointer_idx[0]-self.window_dimensions[0][0]+6, 0
+        if self.scroll_y < 0: self.scroll_y=0
         self.last_scroll_pos_main_scr = (0, 0)
         self.main_start_y_x = (2, 0)
         self.main_end_y_x = (self.window_dimensions[0][0]-2, self.window_dimensions[0][1]-1)
         self.active_window = 1
         self.content = self.data.get_all_entries() if content==None else content
         self.beautified_content = self.data.beautify_output(self.data.get_all_entries()) if beautified_content==None else beautified_content
-        self.pointer_idx = [3, self.data.get_idx_of_entries()] if pointer_idx==None else pointer_idx
 
         # COLOR STUFF FOR IMPORTANCE
         start_color()
@@ -229,14 +230,15 @@ class Renderer:
             self.event_handler(key)
 
     def scroll_pad(self, pad_id: int) -> None:
-        start_x, start_y, end_x, end_y = self.get_coordinates_for_centered_pad(pad_id)
-        self.windows[pad_id].refresh(self.scroll_y, self.scroll_x, start_x, start_y, end_x, end_y)
+        start_y, start_x, end_y, end_x = self.get_coordinates_for_centered_pad(pad_id)
+        self.windows[pad_id].refresh(self.scroll_y, self.scroll_x, start_y, start_x, end_y, end_x)
 
     def event_handler(self, event: str) -> None:
         match event:
             # Scroll operations
             case "KEY_DOWN":
                 try:
+                    if self.active_window == 2: raise ValueError
                     length_idx, current_idx = len(self.pointer_idx[1])-1, self.pointer_idx[1].index(self.pointer_idx[0])
                     if current_idx+1 > length_idx: raise ValueError
                     self.pointer_idx[0] = self.pointer_idx[1][current_idx+1]
@@ -244,7 +246,7 @@ class Renderer:
                     if abs(self.scroll_y - self.window_dimensions[self.active_window][0]-3) <= self.window_dimensions[0][0]: return
                     if self.pointer_idx[1][current_idx+1]-1!=self.pointer_idx[1][current_idx] \
                     and self.window_dimensions[0][0]-3<=self.pointer_idx[0]-self.scroll_y:
-                        self.scroll_y += 5
+                        self.scroll_y = self.pointer_idx[0]-self.window_dimensions[0][0]+6
                     else:
                         self.scroll_y += 1
                 except ValueError:
@@ -253,14 +255,18 @@ class Renderer:
                 self.scroll_pad(self.active_window)
             case "KEY_UP":
                 try:
+                    if self.active_window == 2: raise ValueError
                     length_idx, current_idx = len(self.pointer_idx[1])-1, self.pointer_idx[1].index(self.pointer_idx[0])
                     if current_idx-1 < 0: raise ValueError
                     self.pointer_idx[0] = self.pointer_idx[1][current_idx-1]
                     self.update_scr()
-                    self.scroll_y -= 1 if self.pointer_idx[1][current_idx]==self.pointer_idx[1][current_idx-1]+1 else 5
+                    if self.pointer_idx[1][current_idx]==self.pointer_idx[1][current_idx-1]+1:
+                        self.scroll_y -= 1
+                    else:
+                        self.scroll_y -= -(self.pointer_idx[0]-self.window_dimensions[0][0]+6)
                 except ValueError:
                     self.scroll_y -= 1
-                    if self.scroll_y <= 0: self.scroll_y = 0
+                if self.scroll_y <= 0: self.scroll_y = 0
                 self.scroll_pad(self.active_window)
             case "KEY_RIGHT":
                 if abs(self.scroll_x - self.window_dimensions[self.active_window][1]) <= self.window_dimensions[0][1]:
@@ -312,7 +318,7 @@ class Renderer:
                 self.kill_scr()
             case "KEY_RESIZE":
                 self.kill_scr()
-                Renderer(self.data, self.content, self.beautified_content)
+                Renderer(self.data, self.content, self.beautified_content, self.pointer_idx)
 
     # Implementations of the main procedures
     def search_procedure(self) -> None:
@@ -401,10 +407,12 @@ class Renderer:
         self.windows.insert(1, newpad(self.window_dimensions[1][0], self.window_dimensions[1][1]))
 
     def update_contents(self, new_content: dict) -> None:
+        pointer_entry_hash = self.data.get_entry_hash_by_pointer_idx(self.pointer_idx)
         self.content = new_content
         self.beautified_content = self.data.beautify_output(self.content)
-        self.scroll_y, self.scroll_x = 0, 0
-        self.pointer_idx = [3, self.data.get_idx_of_entries()]
+        self.pointer_idx[1] = self.data.get_idx_of_entries()
+        self.pointer_idx[0] = 3 if pointer_entry_hash==None else self.data.get_pointer_idx_by_hash(pointer_entry_hash, self.pointer_idx[1])
+        self.scroll_y, self.scroll_x = self.pointer_idx[0]-self.window_dimensions[0][0]+6, 0
 
     def update_scr(self, start_y=1, start_x=0) -> None:
         """
