@@ -127,7 +127,11 @@ HELP_MESSAGE = """
  ===============
 
  Arrow Keys -> Scroll contents
- # other functionality
+
+ S -> [S]earch the data
+ F -> [F]ilter output data
+ O -> [O]rder data by a column
+ ENTER -> Do an operation on the selected entry
 
  H -> Toggle this [H]elpmessage
  Q -> [Q]uit program

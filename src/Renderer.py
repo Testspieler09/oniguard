@@ -563,10 +563,44 @@ class Renderer:
         self.update_scr()
 
     def change_procedure(self, hash: str, type_of_data_to_change: str) -> None:
-        pass
+        match type_of_data_to_change:
+            case "entry":
+                pass
+            case "scheme":
+                pass
 
-    def delete_procedure(self, hash: str, type_of_data_to_delete: str) -> None:
-        pass
+    def delete_procedure(
+        self, hash: str, type_of_data_to_delete: str, data: str
+    ) -> None:
+        match type_of_data_to_delete:
+            case "entry":
+                choice, _ = PopUp(self.screen).get_input_radio_btn(
+                    ["No", "Yes"],
+                    f"Do you want to delete this entry.\n\n{data}",
+                )
+                if choice:
+                    self.data.delete_entry(hash)
+                else:
+                    return
+            case "scheme":
+                choice, _ = PopUp(self.screen).get_input_radio_btn(
+                    ["No", "Yes"],
+                    f"Do you want to delete this scheme AND ALL ENTRIES ASSOCIATED WITH IT?\n\n{data}",
+                )
+                if choice:
+                    password = PopUp(self.screen).get_input_string(
+                        "Please provide the masterpassword to delete the scheme and all its entries. [Wrong input -> Back to entries]"
+                    )
+                    folder_path_cross_platform = split(self.data.path_to_file)[0]
+                    with open(join(folder_path_cross_platform, ".salt"), "rb") as f:
+                        kdf = get_hashing_obj(f.readline())
+                    try:
+                        key = convert_pw_to_key(kdf, password)
+                        DataManager(self.data.path_to_file, key)
+                        self.data.delete_scheme(hash)
+                    except:
+                        return
+        self.update_contents(self.data.get_all_entries())
 
     def filter_procedure(self) -> None:
         pass
@@ -672,7 +706,11 @@ class Renderer:
             case 1:
                 self.change_procedure(entry_hash, "entry")
             case 2:
-                self.delete_procedure(entry_hash, "entry")
+                self.delete_procedure(
+                    entry_hash,
+                    "entry",
+                    self.beautified_content.splitlines()[self.pointer_idx[0]],
+                )
             case 3:
                 scheme_hash = self.data.get_scheme_hash_by_entry_hash(entry_hash)
                 if scheme_hash != None:
@@ -680,8 +718,10 @@ class Renderer:
             case 4:
                 scheme_hash = self.data.get_scheme_hash_by_entry_hash(entry_hash)
                 if scheme_hash != None:
-                    self.delete_procedure(scheme_hash, "scheme")
-        self.update_scr()
+                    self.delete_procedure(
+                        scheme_hash, "scheme", self.data.get_scheme_head(scheme_hash)
+                    )
+        self.update_scr(hard_clear=True)
 
     # update methods
     def update_main_dimensions(self) -> None:
@@ -694,10 +734,10 @@ class Renderer:
         )
 
     def update_contents(self, new_content: dict) -> None:
-        pointer_entry_hash = self.data.get_entry_hash_by_pointer_idx(self.pointer_idx)
         self.content = new_content
         self.beautified_content = self.data.beautify_output(self.content)
         self.pointer_idx[1] = self.data.get_idx_of_entries()
+        pointer_entry_hash = self.data.get_entry_hash_by_pointer_idx(self.pointer_idx)
         self.pointer_idx[0] = (
             3
             if pointer_entry_hash == None
@@ -710,11 +750,14 @@ class Renderer:
             0,
         )
 
-    def update_scr(self, start_y=1, start_x=0) -> None:
+    def update_scr(self, start_y=1, start_x=0, hard_clear=False) -> None:
         """
         Updates the main screen, which displays the tables
         """
-        self.windows[1].clrtoeol()
+        if hard_clear:
+            self.windows[1].erase()
+        else:
+            self.windows[1].clrtobot()
         if len(self.beautified_content.splitlines()) == 1:
             self.output_text_to_window(
                 1, " " + self.beautified_content, start_y, start_x

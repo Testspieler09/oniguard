@@ -177,6 +177,13 @@ class DataManager(FileManager):
     def get_schemes(self) -> list:
         return [i[:-2] for i in self.data["schemes"].values()]
 
+    def get_scheme_head(self, scheme_hash: str) -> str:
+        if not scheme_hash in self.data["schemes"].keys():
+            return
+        table = PrettyTable()
+        table.field_names = [i[0] for i in self.data["schemes"][scheme_hash]]
+        return table.__str__().splitlines()[1]
+
     def get_longest_entry_beautified(self) -> tuple:
         data = self.beautify_output(self.get_all_entries()).splitlines()
         y, x = len(data) - 1, max(len(i) for i in data) + 2
@@ -255,8 +262,10 @@ class DataManager(FileManager):
         del self.data["entries"][entry_hash]
 
     def delete_scheme(self, scheme_hash: str) -> None:
-        if not self.get_entries_of_scheme(scheme_hash):
-            return
+        entries_with_scheme = self.get_entries_of_scheme(scheme_hash)
+        for hash in entries_with_scheme.keys():
+            self.delete_entry(hash)
+
         if not scheme_hash in self.data["schemes"].keys():
             return
         del self.data["schemes"][scheme_hash]
