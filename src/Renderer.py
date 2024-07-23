@@ -22,6 +22,7 @@ from re import match
 from textwrap import wrap
 from os.path import split, join
 from Data_Manager import (
+    DataManager,
     generate_password,
     evaluate_password,
     get_hashing_obj,
@@ -561,10 +562,10 @@ class Renderer:
         self.update_main_dimensions()
         self.update_scr()
 
-    def change_procedure(self) -> None:
+    def change_procedure(self, hash: str, type_of_data_to_change: str) -> None:
         pass
 
-    def delete_procedure(self) -> None:
+    def delete_procedure(self, hash: str, type_of_data_to_delete: str) -> None:
         pass
 
     def filter_procedure(self) -> None:
@@ -575,7 +576,9 @@ class Renderer:
 
     def lock_procedure(self) -> None:
         win = newwin(self.window_dimensions[0][0], self.window_dimensions[0][1], 0, 0)
-        message = "Press [L] to login again or [Q] to quit."
+        message = PopUp.make_message_fit_width(
+            "Press [L] to login again or [Q] to quit.", self.window_dimensions[0][1]
+        )
         exiting = False
         for logo in ASCII_ONI_LOGO:
             y, x = len(logo.splitlines()), max(len(i) for i in logo.splitlines())
@@ -589,13 +592,13 @@ class Renderer:
         for i, line in enumerate(logo.splitlines()):
             win.addstr(
                 (self.window_dimensions[0][0] - y) // 2 - 1 + i,
-                (self.window_dimensions[0][1] - x) // 2,
+                (self.window_dimensions[0][1] - x) // 2 - 2,
                 line,
             )
         win.addstr(
             self.window_dimensions[0][0] - 2,
             0,
-            PopUp.make_message_fit_width(message, self.window_dimensions[0][1]),
+            message,
         )
         win.refresh()
 
@@ -612,11 +615,20 @@ class Renderer:
                     try:
                         key = convert_pw_to_key(kdf, password.decode())
                         DataManager(self.data.path_to_file, key)
+                        curs_set(0)
+                        break
                     except:
-                        print("Password not correct")
-                        exiting = True
-                    curs_set(0)
-                    break
+                        error_msg = " Password not correct!"
+                        win.addstr(
+                            self.window_dimensions[0][0] - 2,
+                            0,
+                            error_msg + " " * (len(error_msg) - len(message[0])),
+                        )
+                        win.refresh()
+                        curs_set(0)
+                        sleep(2)
+                        win.addstr(self.window_dimensions[0][0] - 2, 0, message)
+                        win.refresh()
                 case "q" | "key_resize":
                     exiting = True
                     break
@@ -643,7 +655,33 @@ class Renderer:
         )
 
     def on_item_procedure(self) -> None:
-        pass
+        entry_hash = self.data.get_entry_hash_by_pointer_idx(self.pointer_idx)
+        if entry_hash == None:
+            return
+        choice, _ = PopUp(self.screen).get_input_radio_btn(
+            [
+                "Cancel",
+                "Change data of entry",
+                "Delete entry",
+                "Rename columns of scheme",
+                "Delete scheme",
+            ],
+            "What do you want to do?",
+        )
+        match choice:
+            case 1:
+                self.change_procedure(entry_hash, "entry")
+            case 2:
+                self.delete_procedure(entry_hash, "entry")
+            case 3:
+                scheme_hash = self.data.get_scheme_hash_by_entry_hash(entry_hash)
+                if scheme_hash != None:
+                    self.change_procedure(scheme_hash, "scheme")
+            case 4:
+                scheme_hash = self.data.get_scheme_hash_by_entry_hash(entry_hash)
+                if scheme_hash != None:
+                    self.delete_procedure(scheme_hash, "scheme")
+        self.update_scr()
 
     # update methods
     def update_main_dimensions(self) -> None:

@@ -169,6 +169,11 @@ class DataManager(FileManager):
                 return hash
         logger.critical("Couldn't find a the provided scheme")
 
+    def get_scheme_hash_by_entry_hash(self, entry_hash: str) -> str:
+        if not entry_hash in self.data["entries"].keys():
+            return
+        return self.data["entries"][entry_hash]["scheme_hash"]
+
     def get_schemes(self) -> list:
         return [i[:-2] for i in self.data["schemes"].values()]
 
