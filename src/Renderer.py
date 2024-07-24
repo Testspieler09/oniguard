@@ -18,6 +18,7 @@ from curses import (
     A_UNDERLINE,
     A_NORMAL,
 )
+from pyperclip import copy
 from re import match
 from textwrap import wrap
 from os.path import split, join
@@ -192,7 +193,9 @@ class PopUp:
         self.kill_pop_up()
         return current_option, options[current_option]
 
-    def get_input_string(self, p_message: str, p_regex=None) -> str:
+    def get_input_string(
+        self, p_message: str, p_regex=None, anonymize_input=False
+    ) -> str:
         WRONG_INPUT_MESSAGE = "The provided input doesn't match the wanted pattern.\n\n"
         regex = r"[\S\s]*" if p_regex == None else p_regex
         message = self.make_message_fit_width(p_message, self.dimensions[1] - 2)
@@ -201,8 +204,9 @@ class PopUp:
         while True:
             # Init new window and change some settings
             self.win.erase()
-            echo()
             curs_set(1)
+            if not anonymize_input:
+                echo()
 
             # Output info and get input
             self.win.addstr(1, 0, message)
@@ -434,6 +438,10 @@ class Renderer:
                 if self.active_window == 2:
                     return
                 self.order_procedure()
+            case "C" | "c":
+                if self.active_window == 2:
+                    return
+                self.copy_procedure()
             case "L" | "l":
                 # enter lockscreen for -> masterpassword to reenter
                 if self.active_window == 2:
@@ -565,9 +573,44 @@ class Renderer:
     def change_procedure(self, hash: str, type_of_data_to_change: str) -> None:
         match type_of_data_to_change:
             case "entry":
-                pass
+                scheme_values = self.data.get_scheme(
+                    self.data.get_scheme_hash_by_entry_hash(hash)
+                )
+                choice = PopUp(self.screen).get_input_checkboxes(
+                    [
+                        i.strip()
+                        for i in self.beautified_content.splitlines()[
+                            self.pointer_idx[0]
+                        ].split("|")
+                        if i != ""
+                    ],
+                    "What entries do you want to update?",
+                )
+                if choice[0] == []:
+                    return
+                entry = self.data.get_entry_values(hash)
+                for idx, column in zip(choice[0], choice[1]):
+                    entry[idx] = PopUp(self.screen).get_input_string(
+                        f"Please provide the new entry for `{scheme_values[idx][0]}` column.\nThe old one was {column}",
+                        NAME_REGEX,
+                    )
+                self.data.update_entry(hash, entry[:-2])
             case "scheme":
-                pass
+                scheme_values = self.data.get_scheme(hash)
+                choice = PopUp(self.screen).get_input_checkboxes(
+                    [i[0] for i in scheme_values], "What columns do you want to rename?"
+                )
+                if choice[0] == []:
+                    self.update_scr()
+                    return
+                for idx, column in zip(choice[0], choice[1]):
+                    scheme_values[idx][0] = PopUp(self.screen).get_input_string(
+                        f"Please provide the new name for the `{column}` column.",
+                        NAME_REGEX,
+                    )
+                self.data.update_scheme(hash, scheme_values)
+        self.update_contents(self.data.get_all_entries())
+        self.update_scr()
 
     def delete_procedure(
         self, hash: str, type_of_data_to_delete: str, data: str
@@ -589,24 +632,161 @@ class Renderer:
                 )
                 if choice:
                     password = PopUp(self.screen).get_input_string(
-                        "Please provide the masterpassword to delete the scheme and all its entries. [Wrong input -> Back to entries]"
+                        "Please provide the masterpassword to delete the scheme and all its entries. [Wrong input -> Back to entries]",
+                        anonymize_input=True,
                     )
-                    folder_path_cross_platform = split(self.data.path_to_file)[0]
-                    with open(join(folder_path_cross_platform, ".salt"), "rb") as f:
-                        kdf = get_hashing_obj(f.readline())
-                    try:
-                        key = convert_pw_to_key(kdf, password)
-                        DataManager(self.data.path_to_file, key)
+                    if self.data.is_master_password(password):
                         self.data.delete_scheme(hash)
-                    except:
+                    else:
                         return
         self.update_contents(self.data.get_all_entries())
 
     def filter_procedure(self) -> None:
         pass
 
+    def show_procedure(self, hash: str) -> None:
+        entry_hash = self.data.get_entry_hash_by_pointer_idx(self.pointer_idx)
+        if entry_hash == None:
+            return
+        password = PopUp(self.screen).get_input_string(
+            "Please provide the masterpassword as the data will be displayed without anonymization.",
+            anonymize_input=True,
+        )
+        if not self.data.is_master_password(password):
+            self.update_scr()
+            return
+        # end of password part
+        content: list = self.data.get_values_beautified(entry_hash)
+        dimensions = len(content), max(len(i) for i in content)
+        win = newpad(
+            (
+                dimensions[0]
+                if self.main_end_y_x[0] - 1 < dimensions[0]
+                else self.main_end_y_x[0] - 1
+            ),
+            (
+                dimensions[1]
+                if self.main_end_y_x[1] - 1 < dimensions[1]
+                else self.main_end_y_x[1] - 1
+            ),
+        )
+        y, x = (
+            1
+            if dimensions[0] >= self.main_end_y_x[0] - 1
+            else self.main_end_y_x[0] // 2 + dimensions[0] // 2 - 5
+        ), (
+            0
+            if dimensions[1] >= self.main_end_y_x[1] - 1
+            else self.main_end_y_x[1] // 2 - dimensions[1] // 2 - 1
+        )
+        win.addstr(y - 1, x, "Press `ENTER` when you are finished.")
+        for i, line in enumerate(content):
+            win.addstr(y + i, x, line)
+        self.screen.nodelay(False)
+        scroll_y, scroll_x = 0, 0
+        win.refresh(
+            scroll_y,
+            scroll_x,
+            self.main_start_y_x[0] + 1,
+            self.main_start_y_x[1] + 1,
+            self.main_end_y_x[0] - 1,
+            self.main_end_y_x[1] - 1,
+        )
+        while True:
+            key = self.screen.getkey()
+            match key.lower():
+                case "key_up":
+                    scroll_y -= 1
+                    if scroll_y <= 0:
+                        scroll_y = 0
+                    win.refresh(
+                        scroll_y,
+                        scroll_x,
+                        self.main_start_y_x[0] + 1,
+                        self.main_start_y_x[1] + 1,
+                        self.main_end_y_x[0] - 1,
+                        self.main_end_y_x[1] - 1,
+                    )
+                case "key_down":
+                    if (
+                        abs(scroll_y - dimensions[0])
+                        <= self.window_dimensions[0][0] - 3
+                    ):
+                        continue
+                    scroll_y += 1
+                    win.refresh(
+                        scroll_y,
+                        scroll_x,
+                        self.main_start_y_x[0] + 1,
+                        self.main_start_y_x[1] + 1,
+                        self.main_end_y_x[0] - 1,
+                        self.main_end_y_x[1] - 1,
+                    )
+                case "key_left":
+                    scroll_x -= 1
+                    if scroll_x <= 0:
+                        scroll_x = 0
+                    win.refresh(
+                        scroll_y,
+                        scroll_x,
+                        self.main_start_y_x[0] + 1,
+                        self.main_start_y_x[1] + 1,
+                        self.main_end_y_x[0] - 1,
+                        self.main_end_y_x[1] - 1,
+                    )
+                case "key_right":
+                    if (
+                        abs(scroll_x - dimensions[1] - 2)
+                        <= self.window_dimensions[0][1]
+                    ):
+                        continue
+                    scroll_x += 1
+                    win.refresh(
+                        scroll_y,
+                        scroll_x,
+                        self.main_start_y_x[0] + 1,
+                        self.main_start_y_x[1] + 1,
+                        self.main_end_y_x[0] - 1,
+                        self.main_end_y_x[1] - 1,
+                    )
+                case "key_resize":
+                    self.kill_scr()
+                    Renderer(
+                        self.data,
+                        self.content,
+                        self.beautified_content,
+                        self.pointer_idx,
+                    )
+                    return
+                case "\n":
+                    break
+        self.screen.nodelay(True)
+        self.update_scr()
+
     def order_procedure(self) -> None:
         pass
+
+    def copy_procedure(self) -> None:
+        entry_hash = self.data.get_entry_hash_by_pointer_idx(self.pointer_idx)
+        if entry_hash == None:
+            return
+        password = PopUp(self.screen).get_input_string(
+            "Please provide the masterpassword as the data will be displayed without anonymization.",
+            anonymize_input=True,
+        )
+        if not self.data.is_master_password(password):
+            self.update_scr()
+            return
+        options = self.data.get_entry_values(entry_hash)
+        if options == []:
+            return
+        options.insert(0, "Cancel")
+        _, value = PopUp(self.screen).get_input_radio_btn(
+            options, "Which value do you want to copy to your clipboard?"
+        )
+        if value != "Cancel":
+            copy(value)
+        self.update_scr()
 
     def lock_procedure(self) -> None:
         win = newwin(self.window_dimensions[0][0], self.window_dimensions[0][1], 0, 0)
@@ -643,15 +823,10 @@ class Renderer:
                     self.screen.move(self.window_dimensions[0][0] - 1, 0)
                     curs_set(1)
                     password = win.getstr(self.window_dimensions[0][0] - 1, 0)
-                    folder_path_cross_platform = split(self.data.path_to_file)[0]
-                    with open(join(folder_path_cross_platform, ".salt"), "rb") as f:
-                        kdf = get_hashing_obj(f.readline())
-                    try:
-                        key = convert_pw_to_key(kdf, password.decode())
-                        DataManager(self.data.path_to_file, key)
+                    if self.data.is_master_password(password.decode()):
                         curs_set(0)
                         break
-                    except:
+                    else:
                         error_msg = " Password not correct!"
                         win.addstr(
                             self.window_dimensions[0][0] - 2,
@@ -695,6 +870,7 @@ class Renderer:
         choice, _ = PopUp(self.screen).get_input_radio_btn(
             [
                 "Cancel",
+                "Show content uncensored",
                 "Change data of entry",
                 "Delete entry",
                 "Rename columns of scheme",
@@ -704,18 +880,20 @@ class Renderer:
         )
         match choice:
             case 1:
-                self.change_procedure(entry_hash, "entry")
+                self.show_procedure(entry_hash)
             case 2:
+                self.change_procedure(entry_hash, "entry")
+            case 3:
                 self.delete_procedure(
                     entry_hash,
                     "entry",
                     self.beautified_content.splitlines()[self.pointer_idx[0]],
                 )
-            case 3:
+            case 4:
                 scheme_hash = self.data.get_scheme_hash_by_entry_hash(entry_hash)
                 if scheme_hash != None:
                     self.change_procedure(scheme_hash, "scheme")
-            case 4:
+            case 5:
                 scheme_hash = self.data.get_scheme_hash_by_entry_hash(entry_hash)
                 if scheme_hash != None:
                     self.delete_procedure(

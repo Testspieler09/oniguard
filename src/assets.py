@@ -131,6 +131,7 @@ HELP_MESSAGE = """
  S -> [S]earch the data
  F -> [F]ilter output data
  O -> [O]rder data by a column
+ C -> [C]opy data to clipboard (selected entry)
  ENTER -> Do an operation on the selected entry
 
  H -> Toggle this [H]elpmessage

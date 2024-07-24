@@ -129,6 +129,17 @@ class DataManager(FileManager):
         self.hidden_stats = [["Changedate", "Hidden"], ["Creationdate", "Hidden"]]
         self.current_data = None
 
+    def is_master_password(self, pw: str) -> bool:
+        folder_path_cross_platform = split(self.path_to_file)[0]
+        with open(join(folder_path_cross_platform, ".salt"), "rb") as f:
+            kdf = get_hashing_obj(f.readline())
+        try:
+            key = convert_pw_to_key(kdf, pw)
+            DataManager(self.path_to_file, key)
+            return True
+        except:
+            return False
+
     @staticmethod
     def gen_hash() -> str:
         return uuid4().hex
@@ -163,6 +174,24 @@ class DataManager(FileManager):
                 entries.update({key: entry})
         return entries
 
+    def get_entry_values(self, hash: str) -> list:
+        if not hash in self.data["entries"].keys():
+            return []
+        return self.data["entries"][hash]["values"]
+
+    def get_values_beautified(self, hash: str) -> list:
+        if not hash in self.data["entries"].keys():
+            return []
+        scheme_hash = self.data["entries"][hash]["scheme_hash"]
+        if not scheme_hash in self.data["schemes"].keys():
+            return
+
+        table = PrettyTable()
+        table.field_names = (i[0] for i in self.data["schemes"][scheme_hash])
+        table.add_row(self.data["entries"][hash]["values"])
+
+        return table.__str__().splitlines()
+
     def get_scheme_hash_by_scheme(self, p_scheme: list) -> str:
         for hash, scheme in self.data["schemes"].items():
             if scheme[:-2] == p_scheme:
@@ -176,6 +205,11 @@ class DataManager(FileManager):
 
     def get_schemes(self) -> list:
         return [i[:-2] for i in self.data["schemes"].values()]
+
+    def get_scheme(self, hash: str) -> list:
+        if not hash in self.data["schemes"].keys():
+            return
+        return self.data["schemes"][hash][:-2]
 
     def get_scheme_head(self, scheme_hash: str) -> str:
         if not scheme_hash in self.data["schemes"].keys():
@@ -238,16 +272,10 @@ class DataManager(FileManager):
     def update_entry(self, entry_hash: str, new_data: list) -> None:
         if not entry_hash in self.data["entries"].keys():
             return
-        values, type_of_data = new_data
-        if type_of_data == "values":
-            values.extend(
-                [str(datetime.now()), self.data["entries"][entry_hash]["values"][-1]]
-            )
-            self.data["entries"][entry_hash]["values"] = values
-        elif type_of_data == "scheme_hash":
-            self.data["entries"][entry_hash]["scheme_hash"] = values
-        else:
-            logger.critical("Data parsed can't be worked with. [update_entry]")
+        new_data.extend(
+            [str(datetime.now()), self.data["entries"][entry_hash]["values"][-1]]
+        )
+        self.data["entries"][entry_hash]["values"] = new_data
 
     def update_scheme(self, scheme_hash: str, new_data: list) -> None:
         if not scheme_hash in self.data["schemes"].keys():
