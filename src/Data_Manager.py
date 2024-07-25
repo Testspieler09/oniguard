@@ -67,7 +67,7 @@ class FileManager:
         Alternative constructor for when the JSON file doesn't exist yet
         """
         crypt = Cryptographer(key)
-        default_content = f'{{"settings":{{"dates_hidden":[true, true]}},"schemes": {DEFAULT_SCHEMES}, "entries": {{}}}}'
+        default_content = f'{{"settings":{{"dates_hidden":[true, true], "hidden_schemes": []}},"schemes": {DEFAULT_SCHEMES}, "entries": {{}}}}'
         with open(path_with_filename_and_extension, "wb") as f:
             f.write(crypt.encrypt(default_content))
         return
@@ -128,6 +128,7 @@ class DataManager(FileManager):
         super().__init__(path_to_file, key)
         self.hidden_stats = [["Changedate", "Hidden"], ["Creationdate", "Hidden"]]
         self.current_data = None
+        self.order = []
 
     def is_master_password(self, pw: str) -> bool:
         folder_path_cross_platform = split(self.path_to_file)[0]
@@ -144,8 +145,7 @@ class DataManager(FileManager):
     def gen_hash() -> str:
         return uuid4().hex
 
-    @staticmethod
-    def group_data_by_schemes(data: dict) -> dict:
+    def group_data_by_schemes(self, data: dict) -> dict:
         """
         For display purposes
         """
@@ -161,11 +161,18 @@ class DataManager(FileManager):
                 data.append([[hash, values["values"]]])
             else:
                 data[-1].append([hash, values["values"]])
+        # Order logic here
+        for operation in self.order:
+            idx = scheme_hashes.index(operation[0])
+            data[idx].sort(key=lambda x: x[1][operation[1]], reverse=operation[2])
         return scheme_hashes, data
 
     # Getter methods
     def get_all_entries(self) -> dict:
         return self.data["entries"]
+
+    def get_hidden_dates_settings(self) -> list:
+        return self.data["settings"]["dates_hidden"]
 
     def get_entries_of_scheme(self, scheme_hash: str) -> dict:
         entries = {}
@@ -206,6 +213,15 @@ class DataManager(FileManager):
     def get_schemes(self) -> list:
         return [i[:-2] for i in self.data["schemes"].values()]
 
+    def get_schemes_with_hash(self) -> list:
+        return [[i, j[:-2]] for i, j in self.data["schemes"].items()]
+
+    def get_is_hidden_scheme_all_schemes(self) -> list[bool]:
+        return [
+            True if i in self.data["settings"]["hidden_schemes"] else False
+            for i in self.data["schemes"].keys()
+        ]
+
     def get_scheme(self, hash: str) -> list:
         if not hash in self.data["schemes"].keys():
             return
@@ -239,21 +255,28 @@ class DataManager(FileManager):
                 idx.append(counter)
         return idx
 
-    def get_entry_hash_by_pointer_idx(self, pointer_idx: int) -> str | None:
+    def get_entry_hash_by_pointer_idx(self, pointer_idx: list) -> str | None:
         try:
             idx = pointer_idx[1].index(pointer_idx[0])
             joined_list = [i[0] for j in self.current_data for i in j]
             return joined_list[idx]
-        except ValueError:
+        except:
             return
 
-    def get_pointer_idx_by_hash(self, entry_hash: str, pointer_idx: list) -> int:
+    def get_pointer_idx_by_hash(self, entry_hash: str) -> int | None:
         joined_list = [i[0] for j in self.current_data for i in j]
         try:
             idx = joined_list.index(entry_hash)
-            return pointer_idx[idx]
+            return self.get_idx_of_entries()[idx]
         except ValueError:
-            raise Exception("Something went wrong")
+            return
+
+    # Setter
+    def set_hidden_dates_settings(self, new_settings: list[bool]) -> None:
+        self.data["settings"]["dates_hidden"] = new_settings
+
+    def set_hidden_schemes(self, hidden_schemes: list) -> None:
+        self.data["settings"]["hidden_schemes"] = hidden_schemes
 
     # Add data
     def add_entry(self, scheme_hash: str, entry: list) -> None:
@@ -312,7 +335,7 @@ class DataManager(FileManager):
         elif not any(self.data["settings"]["dates_hidden"]):
             pass
         elif self.data["settings"]["dates_hidden"][0]:
-            data = data.pop(-2)
+            data = data[:-2] + data[-1:]
         else:
             data = data[:-1]
         return [i[0] for i in data]
@@ -353,6 +376,8 @@ class DataManager(FileManager):
         scheme_hashes, entries = self.group_data_by_schemes(data)
         self.current_data = entries
         for i, scheme in enumerate(scheme_hashes):
+            if scheme in self.data["settings"]["hidden_schemes"]:
+                continue
             table = PrettyTable()
             # hide or unhide the date stuff
             table.field_names = self.apply_settings_to_hidden_dates(

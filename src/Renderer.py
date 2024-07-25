@@ -43,6 +43,33 @@ from logging import getLogger
 logger = getLogger(__name__)
 
 
+class OniManager:
+    def __init__(self, data: dict) -> None:
+        self.name = data["name"]
+        self.max_hp = data["hp"]
+        self.hp = data["hp"]
+        self.damage = data["attack"]
+        self.ko = False
+
+    def __str__(self) -> str:
+        return f"{self.name} {'='*10*(self.hp//self.max_hp)}"
+
+    def is_ko(self) -> bool:
+        if self.ko:
+            return True
+        else:
+            return False
+
+    def attack(self, target: object) -> None:
+        target.damage(self.damage)
+
+    def damage(self, damage_value: int) -> None:
+        self.hp -= damage_value
+        if self.hp <= 0:
+            self.hp = 0
+            self.ko = True
+
+
 class PopUp:
     def __init__(self, screen: object) -> None:
         y, x = screen.getmaxyx()
@@ -64,7 +91,7 @@ class PopUp:
         del self
 
     # Read input
-    def get_input_checkboxes(self, options: list, message: str) -> list:
+    def get_input_checkboxes(self, options: list, message: str, cache=None) -> list:
         message = self.make_message_fit_width(message, self.dimensions[1] - 2)
         height_of_msg = len(message.splitlines()) + 1
         self.win.addstr(1, 0, message)
@@ -74,7 +101,11 @@ class PopUp:
         scroll_y, scroll_x = 0, 0
         pad = newpad(len(options) + 1, max(len(i) for i in options) + 5)
 
-        selected = [False] * len(options)
+        selected = (
+            [False] * len(options)
+            if cache == None and len(cache) != len(options)
+            else cache
+        )
         current_option = 0
 
         def display_menu():
@@ -568,7 +599,7 @@ class Renderer:
                 self.data.add_entry(scheme_hash, entry)
         self.update_contents(self.data.get_all_entries())
         self.update_main_dimensions()
-        self.update_scr()
+        self.update_scr(hard_clear=True)
 
     def change_procedure(self, hash: str, type_of_data_to_change: str) -> None:
         match type_of_data_to_change:
@@ -610,7 +641,7 @@ class Renderer:
                     )
                 self.data.update_scheme(hash, scheme_values)
         self.update_contents(self.data.get_all_entries())
-        self.update_scr()
+        self.update_scr(hard_clear=True)
 
     def delete_procedure(
         self, hash: str, type_of_data_to_delete: str, data: str
@@ -640,9 +671,39 @@ class Renderer:
                     else:
                         return
         self.update_contents(self.data.get_all_entries())
+        self.update_main_dimensions()
 
     def filter_procedure(self) -> None:
-        pass
+        choice, _ = PopUp(self.screen).get_input_radio_btn(
+            ["Cancel", "Show hidden date statistics", "Filter schemes"],
+            "What do you want to do?",
+        )
+        match choice:
+            case 0:
+                self.update_scr()
+                return
+            case 1:
+                settings = self.data.get_hidden_dates_settings()
+                choice, _ = PopUp(self.screen).get_input_checkboxes(
+                    ["Changedate", "Creationdate"],
+                    "Which hidden date statistics do you want to show?",
+                    [1 - int(i) for i in settings],
+                )
+                self.data.set_hidden_dates_settings(
+                    [True if i not in choice else False for i in range(len(settings))]
+                )
+            case 2:
+                schemes = self.data.get_schemes_with_hash()
+                idx, _ = PopUp(self.screen).get_input_checkboxes(
+                    [str(i[1]) for i in schemes],
+                    "Which schemes do you not want to display?",
+                    self.data.get_is_hidden_scheme_all_schemes(),  # maybe save in settings?!
+                )
+                self.data.set_hidden_schemes(
+                    [j[0] for i, j in enumerate(schemes) if i in idx]
+                )
+        self.update_contents(self.data.get_all_entries())
+        self.update_scr(hard_clear=True)
 
     def show_procedure(self, hash: str) -> None:
         entry_hash = self.data.get_entry_hash_by_pointer_idx(self.pointer_idx)
@@ -764,7 +825,29 @@ class Renderer:
         self.update_scr()
 
     def order_procedure(self) -> None:
-        pass
+        entry_hash = self.data.get_entry_hash_by_pointer_idx(self.pointer_idx)
+        if entry_hash == None:
+            return
+        scheme_hash = self.data.get_scheme_hash_by_entry_hash(entry_hash)
+        scheme_values = self.data.get_scheme(scheme_hash)
+        scheme_values.insert(0, ["Cancel", "None"])
+        scheme_values.extend(self.data.hidden_stats)
+        idx, _ = PopUp(self.screen).get_input_radio_btn(
+            [i[0] for i in scheme_values], "What column do you want to order by?"
+        )
+        if idx == 0:
+            self.update_scr()
+            return
+        choice, _ = PopUp(self.screen).get_input_radio_btn(
+            ["Ascending [1, 2, 3, 4, ...]", "Descending [100, 99, 98, ...]"],
+            "How should the data be displayed?",
+        )
+        if scheme_hash in (i[0] for i in self.data.order):
+            idx = [i[0] for i in self.data.order].index(scheme_hash)
+            self.data.order.pop(idx)
+        self.data.order.append([scheme_hash, idx - 1, choice])
+        self.update_contents(self.data.get_all_entries())
+        self.update_scr()
 
     def copy_procedure(self) -> None:
         entry_hash = self.data.get_entry_hash_by_pointer_idx(self.pointer_idx)
@@ -914,14 +997,13 @@ class Renderer:
     def update_contents(self, new_content: dict) -> None:
         self.content = new_content
         self.beautified_content = self.data.beautify_output(self.content)
-        self.pointer_idx[1] = self.data.get_idx_of_entries()
         pointer_entry_hash = self.data.get_entry_hash_by_pointer_idx(self.pointer_idx)
+        self.pointer_idx[1] = self.data.get_idx_of_entries()
+        new_pointer_idx = self.data.get_pointer_idx_by_hash(pointer_entry_hash)
         self.pointer_idx[0] = (
             3
-            if pointer_entry_hash == None
-            else self.data.get_pointer_idx_by_hash(
-                pointer_entry_hash, self.pointer_idx[1]
-            )
+            if pointer_entry_hash == None or new_pointer_idx == None
+            else new_pointer_idx
         )
         self.scroll_y, self.scroll_x = (
             self.pointer_idx[0] - self.window_dimensions[0][0] + 6,

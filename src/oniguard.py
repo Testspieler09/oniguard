@@ -14,12 +14,6 @@ from logging import shutdown
 from LOGGER import setup_logger
 
 
-class OniManager:
-    def __init__(self, data: dict) -> None:
-        self.rank = data["rank"]
-        self.score = data["score"]
-
-
 def ask_yes_no(message: str) -> bool:
     choice = ""
     while choice.lower() != "y" and choice.lower() != "n":
