@@ -9,7 +9,7 @@ from shutil import rmtree
 from sys import exit
 from assets import PROGRAM_NAME, DESCR
 from Data_Manager import DataManager, get_hashing_obj, convert_pw_to_key
-from Renderer import Renderer
+from Renderer import Renderer, OniManager
 from logging import shutdown
 from LOGGER import setup_logger
 
@@ -61,11 +61,19 @@ def login_procedure(folder_path_cross_platform: str) -> object | None:
         )
     except:
         print("Password not correct")
-        # sleep(5)
+        sleep(5)
         exit()
 
 
 def main(args: object) -> None:
+    if args.game:
+        leaderboard_path = join("..", "userdata", ".leaderboard")
+        if not exists(leaderboard_path):
+            with open(leaderboard_path, "w") as f:
+                f.write("[]")
+        OniManager.init_player(args.username)
+        exit()
+
     folder_path_cross_platform = join("..", "userdata", args.username)
 
     # Delete userdata
@@ -97,6 +105,9 @@ if __name__ == "__main__":
     parser.add_argument("username", help="Specify which user you want to login as.")
     parser.add_argument(
         "-d", "--delete", action="store_true", help="Delete the specified user."
+    )
+    parser.add_argument(
+        "-g", "--game", action="store_true", help="Play an oni themed game."
     )
 
     args = parser.parse_args()

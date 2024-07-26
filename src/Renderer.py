@@ -20,8 +20,10 @@ from curses import (
 )
 from pyperclip import copy
 from re import match
+from ast import literal_eval
 from textwrap import wrap
 from os.path import split, join
+from Finder import Finder
 from Data_Manager import (
     DataManager,
     generate_password,
@@ -32,10 +34,10 @@ from Data_Manager import (
 from assets import (
     HELP_MESSAGE,
     FOOTER_TEXT,
-    INSTRUCTIONS,
     CONSTRAINTS,
     NAME_REGEX,
     ASCII_ONI_LOGO,
+    ONI_ENEMIES,
 )
 from time import sleep
 from logging import getLogger
@@ -48,11 +50,46 @@ class OniManager:
         self.name = data["name"]
         self.max_hp = data["hp"]
         self.hp = data["hp"]
-        self.damage = data["attack"]
+        self.damage = data["damage"]
         self.ko = False
+        self.num_guesses = 0
+        self.leaderboard = self.get_leaderboard()
+        self.run_game()
 
     def __str__(self) -> str:
-        return f"{self.name} {'='*10*(self.hp//self.max_hp)}"
+        healthbar = "=" * round(10 * self.hp / self.max_hp)
+        return (
+            f"{self.name} {healthbar if healthbar != '' and not self.is_ko() else ':'}"
+        )
+
+    @staticmethod
+    def get_leaderboard() -> None:
+        with open(join("..", "userdata", ".leaderboard"), "r") as f:
+            return literal_eval(f.readline())
+
+    def add_leaderboard(self) -> None:
+        if (
+            len(self.leaderboard) == 5
+            and not self.leaderboard[-1][1] > self.num_guesses
+        ):
+            return
+
+        self.leaderboard.append([self.name, self.num_guesses])
+        self.leaderboard.sort(key=lambda x: x[1])
+        print(self.leaderboard)
+
+        if len(self.leaderboard) >= 5:
+            self.leaderboard = self.leaderboard[:5]
+
+        with open(join("..", "userdata", ".leaderboard"), "w") as f:
+            f.write(str(self.leaderboard))
+
+    @classmethod
+    def init_player(cls, name: str) -> None:
+        cls({"name": name, "hp": 500, "damage": 50})
+
+    def run_game(self) -> None:
+        pass
 
     def is_ko(self) -> bool:
         if self.ko:
@@ -61,9 +98,9 @@ class OniManager:
             return False
 
     def attack(self, target: object) -> None:
-        target.damage(self.damage)
+        target._damage(self.damage)
 
-    def damage(self, damage_value: int) -> None:
+    def _damage(self, damage_value: int) -> None:
         self.hp -= damage_value
         if self.hp <= 0:
             self.hp = 0
@@ -511,7 +548,13 @@ class Renderer:
 
     # Implementations of the main procedures
     def search_procedure(self) -> None:
-        pass
+        if self.content == {}:
+            return
+        search_key = PopUp(self.screen).get_input_string(
+            "What are you searching for?", NAME_REGEX
+        )
+        elements = Finder().fuzzy_search(search_key, self.content)
+        self.update_scr()
 
     def add_procedure(self) -> None:
         popup = PopUp(self.screen)
@@ -558,7 +601,8 @@ class Renderer:
                 schemes.insert(0, "Cancel")
                 popup = PopUp(self.screen)
                 idx, _ = popup.get_input_radio_btn(
-                    [str(i) for i in schemes], INSTRUCTIONS["add"]
+                    [str(i) for i in schemes],
+                    "What scheme do you want to add the entry to?",
                 )
                 if idx == 0:
                     self.update_scr()
@@ -1127,3 +1171,5 @@ if __name__ == "__main__":
     key = urlsafe_b64encode(kdf.derive(b"g"))
     dm = DataManager("..\\userdata\\test\\test.data", key)
     renderer = Renderer(dm)
+    # game
+    player = OniManager.init_player("test")

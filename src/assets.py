@@ -154,10 +154,16 @@ DEFAULT_SCHEMES = {
     ],
 }
 
-INSTRUCTIONS = {"add": "What scheme do you want to add the entry to?"}
-
 CONSTRAINTS = ["None", "Password", "Truncate", "Hidden"]
 
 FOOTER_TEXT = ["[H]elp", "[Q]uit"]
 
 NAME_REGEX = r"^[\S\s]+$"
+
+ONI_ENEMIES = {
+    "Level 1": {"name": "test", "hp": 750, "damage": 10, "gimmick": "normal"},
+    "Level 2": {"name": "test", "hp": 900, "damage": 25, "gimmick": "normal"},
+    "Level 3": {"name": "test", "hp": 1100, "damage": 50, "gimmick": "normal"},
+    "Level 4": {"name": "test", "hp": 1250, "damage": 75, "gimmick": "normal"},
+    "Level 5": {"name": "test", "hp": 2000, "damage": 100, "gimmick": "normal"},
+}
