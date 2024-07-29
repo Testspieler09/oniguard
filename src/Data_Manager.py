@@ -84,17 +84,16 @@ class FileManager:
         logger.critical("Wrong password provided or something else went wrong.")
         raise Exception("Wrong Password")
 
-    def update_data(self, data: dict) -> None:
+    def update_data(self) -> None:
         """
         Overwrite old data with new data
         """
-        self.data = data
         with open(self.path_to_file, "wb") as f:
-            f.write(self.crypt.encrypt(str(self.data)))
+            f.write(self.crypt.encrypt(str(self.data).replace("True", "true")))
 
     def write_backup(self) -> None:
         with open(self.backup_path, "wb") as f:
-            f.write(self.crypt.encrypt(str(self.data)))
+            f.write(self.crypt.encrypt(str(self.data).replace("True", "true")))
 
     def load_backup_data(self) -> None:
         """
@@ -198,6 +197,59 @@ class DataManager(FileManager):
         table.add_row(self.data["entries"][hash]["values"])
 
         return table.__str__().splitlines()
+
+    def get_entries_beautified(self, hashes: list) -> list:
+        data = {
+            key: values for key, values in self.data["entries"].items() if key in hashes
+        }
+        output = ""
+        scheme_hashes, entries = self.group_data_by_schemes(data)
+        self.current_data = entries
+        for i, scheme in enumerate(scheme_hashes):
+            if scheme in self.data["settings"]["hidden_schemes"]:
+                continue
+            table = PrettyTable()
+            # hide or unhide the date stuff
+            table.field_names = self.apply_settings_to_hidden_dates(
+                self.data["schemes"][scheme], True
+            )
+
+            for entry in entries[i]:
+                # prepare data based on constraints
+                modified_entry = self.apply_constraints_to_data(
+                    list(zip(entry[1], (i[1] for i in self.data["schemes"][scheme])))
+                )
+                table.add_row(self.apply_settings_to_hidden_dates(modified_entry))
+            output += f"{table.__str__()}\n\n"
+        return (
+            output.splitlines()
+            if output != ""
+            else ["You have no entries to display yet. Add one with [A]."]
+        )
+
+    def get_entries_anonymised_with_hash(self, hashes: list) -> list:
+        entries = [i for i in self.data["entries"].items() if i[0] in hashes]
+        options = []
+        for entry in entries:
+            options.append(
+                [
+                    entry[0],
+                    " | ".join(str(i[0]) for i in self.apply_constraints_to_data(
+                        list(
+                            zip(
+                                entry[1]["values"],
+                                (
+                                    i[1]
+                                    for i in self.data["schemes"][
+                                        entry[1]["scheme_hash"]
+                                    ]
+                                ),
+                            )
+                        )
+                        )[:-2]),
+                ]
+            )
+        return options
 
     def get_scheme_hash_by_scheme(self, p_scheme: list) -> str:
         for hash, scheme in self.data["schemes"].items():

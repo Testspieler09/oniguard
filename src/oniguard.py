@@ -85,7 +85,9 @@ def main(args: object) -> None:
         exit()
 
     data_manager = login_procedure(folder_path_cross_platform)
+    data_manager.write_backup()
     Renderer(data_manager)
+    print("Thank you for using OniGuard. If there is any issue with the project open an issue on github [ https://github.com/Testspieler09/oniguard ]")
 
 
 if __name__ == "__main__":

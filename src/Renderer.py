@@ -140,7 +140,7 @@ class PopUp:
 
         selected = (
             [False] * len(options)
-            if cache == None and len(cache) != len(options)
+            if cache == None or len(cache) != len(options)
             else cache
         )
         current_option = 0
@@ -310,7 +310,7 @@ class PopUp:
 
 class Renderer:
     def __init__(
-        self, data_mng: object, content=None, beautified_content=None, pointer_idx=None
+            self, data_mng: object, beautified_content=None, pointer_idx=None
     ) -> None:
         self.screen = initscr()
         self.data = data_mng
@@ -349,7 +349,7 @@ class Renderer:
             self.window_dimensions[0][1] - 1,
         )
         self.active_window = 1
-        self.content = self.data.get_all_entries() if content == None else content
+        self.content = self.data.get_all_entries()
         self.beautified_content = (
             self.data.beautify_output(self.data.get_all_entries())
             if beautified_content == None
@@ -378,6 +378,7 @@ class Renderer:
         self.run_scr()
 
     def kill_scr(self) -> None:
+        self.data.update_data()
         self.running = False
         nocbreak()
         self.screen.keypad(False)
@@ -496,11 +497,13 @@ class Renderer:
                 if self.active_window == 2:
                     return
                 self.add_procedure()
+                self.data.update_data()
             case "F" | "f":
                 # filter schemes and date stats
                 if self.active_window == 2:
                     return
                 self.filter_procedure()
+                self.data.update_data()
             case "O" | "o":
                 # order by any column in table pointer is at (if multiple shown)
                 if self.active_window == 2:
@@ -520,6 +523,7 @@ class Renderer:
                 if self.active_window == 2:
                     return
                 self.on_item_procedure()
+                self.data.update_data()
             # Default operations
             case "H" | "h":
                 if self.active_window == 2:
@@ -546,222 +550,7 @@ class Renderer:
                     self.data, self.content, self.beautified_content, self.pointer_idx
                 )
 
-    # Implementations of the main procedures
-    def search_procedure(self) -> None:
-        if self.content == {}:
-            return
-        search_key = PopUp(self.screen).get_input_string(
-            "What are you searching for?", NAME_REGEX
-        )
-        elements = Finder().fuzzy_search(search_key, self.content)
-        self.update_scr()
-
-    def add_procedure(self) -> None:
-        popup = PopUp(self.screen)
-        _, input = popup.get_input_radio_btn(
-            ["Scheme", "Entry"], "What do you want to add?"
-        )
-        match input:
-            case "Scheme":
-                data = []
-                while True:
-                    _, action = PopUp(self.screen).get_input_radio_btn(
-                        ["Add column", "Remove column", "Stop"],
-                        f"What do you want to do?\nScheme: {data}",
-                    )
-                    match action:
-                        case "Stop":
-                            break
-                        case "Add column":
-                            name = PopUp(self.screen).get_input_string(
-                                "Please provide a name for the column.", NAME_REGEX
-                            )
-                            _, constraint = PopUp(self.screen).get_input_radio_btn(
-                                CONSTRAINTS, "What constraint would you like to add."
-                            )
-                            if not [name, constraint] in data:
-                                data.append([name, constraint])
-                        case "Remove column":
-                            if data == []:
-                                PopUp(self.screen).get_input_string(
-                                    "There are no columns yet. Press `Enter` to continue."
-                                )
-                                continue
-                            idx, _ = PopUp(self.screen).get_input_checkboxes(
-                                [str(i) for i in data],
-                                "Which columns do you want to remove?",
-                            )
-                            for i in sorted(idx, reverse=True):
-                                data.remove(data[i])
-                if data != []:
-                    self.data.add_scheme(data)
-            case "Entry":
-                # get scheme_hash
-                schemes = self.data.get_schemes()
-                schemes.insert(0, "Cancel")
-                popup = PopUp(self.screen)
-                idx, _ = popup.get_input_radio_btn(
-                    [str(i) for i in schemes],
-                    "What scheme do you want to add the entry to?",
-                )
-                if idx == 0:
-                    self.update_scr()
-                    return
-                scheme_hash = self.data.get_scheme_hash_by_scheme(schemes[idx])
-                # iterate over scheme and ask for entries
-                entry = []
-                for item in schemes[idx]:
-                    popup = PopUp(self.screen)
-                    if item[1] != "Password":
-                        input = popup.get_input_string(
-                            f"Provide a entry for the '{item[0]}' column.\n", NAME_REGEX
-                        )
-                    else:
-                        idx, _ = popup.get_input_radio_btn(
-                            ["generate password", "input it manually"],
-                            "What do you want to do?",
-                        )
-                        if idx == 0:
-                            length = PopUp(self.screen).get_input_string(
-                                "How long is the password supposed to be?", r"^\d+$"
-                            )
-                            input = generate_password(int(length))
-                        else:
-                            while True:
-                                input = popup.get_input_string(
-                                    f"Provide a entry for the '{item[0]}' column.\n",
-                                    NAME_REGEX,
-                                )
-                                rating = evaluate_password(input)
-                                idx, _ = PopUp(self.screen).get_input_radio_btn(
-                                    ["Continue", "New password"],
-                                    f"Your password has a security rating of {rating}.",
-                                )
-                                if idx == 0:
-                                    break
-                    entry.append(input)
-                self.data.add_entry(scheme_hash, entry)
-        self.update_contents(self.data.get_all_entries())
-        self.update_main_dimensions()
-        self.update_scr(hard_clear=True)
-
-    def change_procedure(self, hash: str, type_of_data_to_change: str) -> None:
-        match type_of_data_to_change:
-            case "entry":
-                scheme_values = self.data.get_scheme(
-                    self.data.get_scheme_hash_by_entry_hash(hash)
-                )
-                choice = PopUp(self.screen).get_input_checkboxes(
-                    [
-                        i.strip()
-                        for i in self.beautified_content.splitlines()[
-                            self.pointer_idx[0]
-                        ].split("|")
-                        if i != ""
-                    ],
-                    "What entries do you want to update?",
-                )
-                if choice[0] == []:
-                    return
-                entry = self.data.get_entry_values(hash)
-                for idx, column in zip(choice[0], choice[1]):
-                    entry[idx] = PopUp(self.screen).get_input_string(
-                        f"Please provide the new entry for `{scheme_values[idx][0]}` column.\nThe old one was {column}",
-                        NAME_REGEX,
-                    )
-                self.data.update_entry(hash, entry[:-2])
-            case "scheme":
-                scheme_values = self.data.get_scheme(hash)
-                choice = PopUp(self.screen).get_input_checkboxes(
-                    [i[0] for i in scheme_values], "What columns do you want to rename?"
-                )
-                if choice[0] == []:
-                    self.update_scr()
-                    return
-                for idx, column in zip(choice[0], choice[1]):
-                    scheme_values[idx][0] = PopUp(self.screen).get_input_string(
-                        f"Please provide the new name for the `{column}` column.",
-                        NAME_REGEX,
-                    )
-                self.data.update_scheme(hash, scheme_values)
-        self.update_contents(self.data.get_all_entries())
-        self.update_scr(hard_clear=True)
-
-    def delete_procedure(
-        self, hash: str, type_of_data_to_delete: str, data: str
-    ) -> None:
-        match type_of_data_to_delete:
-            case "entry":
-                choice, _ = PopUp(self.screen).get_input_radio_btn(
-                    ["No", "Yes"],
-                    f"Do you want to delete this entry.\n\n{data}",
-                )
-                if choice:
-                    self.data.delete_entry(hash)
-                else:
-                    return
-            case "scheme":
-                choice, _ = PopUp(self.screen).get_input_radio_btn(
-                    ["No", "Yes"],
-                    f"Do you want to delete this scheme AND ALL ENTRIES ASSOCIATED WITH IT?\n\n{data}",
-                )
-                if choice:
-                    password = PopUp(self.screen).get_input_string(
-                        "Please provide the masterpassword to delete the scheme and all its entries. [Wrong input -> Back to entries]",
-                        anonymize_input=True,
-                    )
-                    if self.data.is_master_password(password):
-                        self.data.delete_scheme(hash)
-                    else:
-                        return
-        self.update_contents(self.data.get_all_entries())
-        self.update_main_dimensions()
-
-    def filter_procedure(self) -> None:
-        choice, _ = PopUp(self.screen).get_input_radio_btn(
-            ["Cancel", "Show hidden date statistics", "Filter schemes"],
-            "What do you want to do?",
-        )
-        match choice:
-            case 0:
-                self.update_scr()
-                return
-            case 1:
-                settings = self.data.get_hidden_dates_settings()
-                choice, _ = PopUp(self.screen).get_input_checkboxes(
-                    ["Changedate", "Creationdate"],
-                    "Which hidden date statistics do you want to show?",
-                    [1 - int(i) for i in settings],
-                )
-                self.data.set_hidden_dates_settings(
-                    [True if i not in choice else False for i in range(len(settings))]
-                )
-            case 2:
-                schemes = self.data.get_schemes_with_hash()
-                idx, _ = PopUp(self.screen).get_input_checkboxes(
-                    [str(i[1]) for i in schemes],
-                    "Which schemes do you not want to display?",
-                    self.data.get_is_hidden_scheme_all_schemes(),  # maybe save in settings?!
-                )
-                self.data.set_hidden_schemes(
-                    [j[0] for i, j in enumerate(schemes) if i in idx]
-                )
-        self.update_contents(self.data.get_all_entries())
-        self.update_scr(hard_clear=True)
-
-    def show_procedure(self, hash: str) -> None:
-        entry_hash = self.data.get_entry_hash_by_pointer_idx(self.pointer_idx)
-        if entry_hash == None:
-            return
-        password = PopUp(self.screen).get_input_string(
-            "Please provide the masterpassword as the data will be displayed without anonymization.",
-            anonymize_input=True,
-        )
-        if not self.data.is_master_password(password):
-            self.update_scr()
-            return
-        # end of password part
-        content: list = self.data.get_values_beautified(entry_hash)
+    def quick_display(self, content: list) -> None:
         dimensions = len(content), max(len(i) for i in content)
         win = newpad(
             (
@@ -778,7 +567,7 @@ class Renderer:
         y, x = (
             1
             if dimensions[0] >= self.main_end_y_x[0] - 1
-            else self.main_end_y_x[0] // 2 + dimensions[0] // 2 - 5
+            else self.main_end_y_x[0] // 2 - dimensions[0] // 2
         ), (
             0
             if dimensions[1] >= self.main_end_y_x[1] - 1
@@ -868,6 +657,236 @@ class Renderer:
         self.screen.nodelay(True)
         self.update_scr()
 
+    # Implementations of the main procedures
+    def search_procedure(self) -> None:
+        if self.content == {}:
+            return
+        search_key = PopUp(self.screen).get_input_string(
+            "What are you searching for?", NAME_REGEX
+        )
+        elements = Finder.fuzzy_search(self.content, search_key)
+        content: list = self.data.get_entries_beautified([i[0] for i in elements])
+        self.quick_display(content)
+        options = self.data.get_entries_anonymised_with_hash([i[0] for i in elements])
+        options.insert(0, ["", "Cancel"])
+        idx, _ = PopUp(self.screen).get_input_radio_btn(
+            [str(i[1]) for i in options], "What entry do you want to set the pointer to?"
+        )
+        if idx == 0:
+            self.update_scr()
+            return
+        self.pointer_idx[0] = self.data.get_pointer_idx_by_hash(options[idx][0])
+        self.update_contents()
+        self.update_scr()
+
+    def add_procedure(self) -> None:
+        popup = PopUp(self.screen)
+        _, input = popup.get_input_radio_btn(
+            ["Scheme", "Entry"], "What do you want to add?"
+        )
+        match input:
+            case "Scheme":
+                data = []
+                while True:
+                    _, action = PopUp(self.screen).get_input_radio_btn(
+                        ["Add column", "Remove column", "Stop"],
+                        f"What do you want to do?\nScheme: {data}",
+                    )
+                    match action:
+                        case "Stop":
+                            break
+                        case "Add column":
+                            name = PopUp(self.screen).get_input_string(
+                                "Please provide a name for the column.", NAME_REGEX
+                            )
+                            _, constraint = PopUp(self.screen).get_input_radio_btn(
+                                CONSTRAINTS, "What constraint would you like to add."
+                            )
+                            if not [name, constraint] in data:
+                                data.append([name, constraint])
+                        case "Remove column":
+                            if data == []:
+                                PopUp(self.screen).get_input_string(
+                                    "There are no columns yet. Press `Enter` to continue."
+                                )
+                                continue
+                            idx, _ = PopUp(self.screen).get_input_checkboxes(
+                                [str(i) for i in data],
+                                "Which columns do you want to remove?",
+                            )
+                            for i in sorted(idx, reverse=True):
+                                data.remove(data[i])
+                if data != []:
+                    self.data.add_scheme(data)
+            case "Entry":
+                # get scheme_hash
+                schemes = self.data.get_schemes()
+                schemes.insert(0, "Cancel")
+                popup = PopUp(self.screen)
+                idx, _ = popup.get_input_radio_btn(
+                    [str(i) for i in schemes],
+                    "What scheme do you want to add the entry to?",
+                )
+                if idx == 0:
+                    self.update_scr()
+                    return
+                scheme_hash = self.data.get_scheme_hash_by_scheme(schemes[idx])
+                # iterate over scheme and ask for entries
+                entry = []
+                for item in schemes[idx]:
+                    popup = PopUp(self.screen)
+                    if item[1] != "Password":
+                        input = popup.get_input_string(
+                            f"Provide a entry for the '{item[0]}' column.\n", NAME_REGEX
+                        )
+                    else:
+                        idx, _ = popup.get_input_radio_btn(
+                            ["generate password", "input it manually"],
+                            "What do you want to do?",
+                        )
+                        if idx == 0:
+                            length = PopUp(self.screen).get_input_string(
+                                "How long is the password supposed to be?", r"^\d+$"
+                            )
+                            input = generate_password(int(length))
+                        else:
+                            while True:
+                                input = popup.get_input_string(
+                                    f"Provide a entry for the '{item[0]}' column.\n",
+                                    NAME_REGEX,
+                                )
+                                rating = evaluate_password(input)
+                                idx, _ = PopUp(self.screen).get_input_radio_btn(
+                                    ["Continue", "New password"],
+                                    f"Your password has a security rating of {rating}.",
+                                )
+                                if idx == 0:
+                                    break
+                    entry.append(input)
+                self.data.add_entry(scheme_hash, entry)
+        self.update_contents()
+        self.update_main_dimensions()
+        self.update_scr(hard_clear=True)
+
+    def change_procedure(self, hash: str, type_of_data_to_change: str) -> None:
+        match type_of_data_to_change:
+            case "entry":
+                scheme_values = self.data.get_scheme(
+                    self.data.get_scheme_hash_by_entry_hash(hash)
+                )
+                choice = PopUp(self.screen).get_input_checkboxes(
+                    [
+                        i.strip()
+                        for i in self.beautified_content.splitlines()[
+                            self.pointer_idx[0]
+                        ].split("|")
+                        if i != ""
+                    ],
+                    "What entries do you want to update?",
+                )
+                if choice[0] == []:
+                    return
+                entry = self.data.get_entry_values(hash)
+                for idx, column in zip(*choice):
+                    entry[idx] = PopUp(self.screen).get_input_string(
+                        f"Please provide the new entry for `{scheme_values[idx][0]}` column.\nThe old one was {column}",
+                        NAME_REGEX,
+                    )
+                self.data.update_entry(hash, entry[:-2])
+            case "scheme":
+                scheme_values = self.data.get_scheme(hash)
+                choice = PopUp(self.screen).get_input_checkboxes(
+                    [i[0] for i in scheme_values], "What columns do you want to rename?"
+                )
+                if choice[0] == []:
+                    self.update_scr()
+                    return
+                for idx, column in zip(*choice):
+                    scheme_values[idx][0] = PopUp(self.screen).get_input_string(
+                        f"Please provide the new name for the `{column}` column.",
+                        NAME_REGEX,
+                    )
+                self.data.update_scheme(hash, scheme_values)
+        self.update_contents()
+        self.update_scr(hard_clear=True)
+
+    def delete_procedure(
+        self, hash: str, type_of_data_to_delete: str, data: str
+    ) -> None:
+        match type_of_data_to_delete:
+            case "entry":
+                choice, _ = PopUp(self.screen).get_input_radio_btn(
+                    ["No", "Yes"],
+                    f"Do you want to delete this entry.\n\n{data}",
+                )
+                if choice:
+                    self.data.delete_entry(hash)
+                else:
+                    return
+            case "scheme":
+                choice, _ = PopUp(self.screen).get_input_radio_btn(
+                    ["No", "Yes"],
+                    f"Do you want to delete this scheme AND ALL ENTRIES ASSOCIATED WITH IT?\n\n{data}",
+                )
+                if choice:
+                    password = PopUp(self.screen).get_input_string(
+                        "Please provide the masterpassword to delete the scheme and all its entries. [Wrong input -> Back to entries]",
+                        anonymize_input=True,
+                    )
+                    if self.data.is_master_password(password):
+                        self.data.delete_scheme(hash)
+                    else:
+                        return
+        self.update_contents()
+        self.update_main_dimensions()
+
+    def filter_procedure(self) -> None:
+        choice, _ = PopUp(self.screen).get_input_radio_btn(
+            ["Cancel", "Show hidden date statistics", "Filter schemes"],
+            "What do you want to do?",
+        )
+        match choice:
+            case 0:
+                self.update_scr()
+                return
+            case 1:
+                settings = self.data.get_hidden_dates_settings()
+                choice, _ = PopUp(self.screen).get_input_checkboxes(
+                    ["Changedate", "Creationdate"],
+                    "Which hidden date statistics do you want to show?",
+                    [1 - int(i) for i in settings],
+                )
+                self.data.set_hidden_dates_settings(
+                    [True if i not in choice else False for i in range(len(settings))]
+                )
+            case 2:
+                schemes = self.data.get_schemes_with_hash()
+                idx, _ = PopUp(self.screen).get_input_checkboxes(
+                    [str(i[1]) for i in schemes],
+                    "Which schemes do you not want to display?",
+                    self.data.get_is_hidden_scheme_all_schemes(),  # maybe save in settings?!
+                )
+                self.data.set_hidden_schemes(
+                    [j[0] for i, j in enumerate(schemes) if i in idx]
+                )
+        self.update_contents()
+        self.update_scr(hard_clear=True)
+
+    def show_procedure(self, hash: str) -> None:
+        entry_hash = self.data.get_entry_hash_by_pointer_idx(self.pointer_idx)
+        if entry_hash == None:
+            return
+        password = PopUp(self.screen).get_input_string(
+            "Please provide the masterpassword as the data will be displayed without anonymization.",
+            anonymize_input=True,
+        )
+        if not self.data.is_master_password(password):
+            self.update_scr()
+            return
+        # end of password part
+        content: list = self.data.get_values_beautified(entry_hash)
+        self.quick_display(content)
+
     def order_procedure(self) -> None:
         entry_hash = self.data.get_entry_hash_by_pointer_idx(self.pointer_idx)
         if entry_hash == None:
@@ -890,7 +909,7 @@ class Renderer:
             idx = [i[0] for i in self.data.order].index(scheme_hash)
             self.data.order.pop(idx)
         self.data.order.append([scheme_hash, idx - 1, choice])
-        self.update_contents(self.data.get_all_entries())
+        self.update_contents()
         self.update_scr()
 
     def copy_procedure(self) -> None:
@@ -1038,8 +1057,7 @@ class Renderer:
             1, newpad(self.window_dimensions[1][0], self.window_dimensions[1][1])
         )
 
-    def update_contents(self, new_content: dict) -> None:
-        self.content = new_content
+    def update_contents(self) -> None:
         self.beautified_content = self.data.beautify_output(self.content)
         pointer_entry_hash = self.data.get_entry_hash_by_pointer_idx(self.pointer_idx)
         self.pointer_idx[1] = self.data.get_idx_of_entries()

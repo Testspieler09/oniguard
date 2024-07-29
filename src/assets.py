@@ -13,7 +13,7 @@ An Oni-themed password manager, primarily designed for terminal use, though a GU
 The manager boasts several features:
     - password generation
     - a robust search function and
-    - editable schemas.
+    - editable schemes.
 
 Additionally, it incorporates color-coded elements and employs cryptography for enhanced security purposes.
 """

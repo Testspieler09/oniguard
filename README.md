@@ -51,7 +51,7 @@ An Oni-themed password manager, primarily designed for terminal use, though a GU
 The manager boasts several features:
     - password generation
     - a robust search function and
-    - editable schemas.
+    - editable schemes.
 
 Additionally, it incorporates color-coded elements and employs cryptography for enhanced security purposes.
 
@@ -82,6 +82,24 @@ ENTER -> Do an operation on the selected entry
 
 H -> Toggle this [H]elpmessage
 Q -> [Q]uit program
+```
+
+### Select and deselect checkboxes
+
+To select or deselect a checkbox just press the spacebar.
+
+## Installation
+
+On Microsoft Windows run
+
+```txt
+pip install -r requirements.txt
+```
+
+On other operating systems run
+
+```txt
+pip install -r requirements_no_windows.txt
 ```
 
 ## Pyperclip on Linux
