@@ -161,9 +161,25 @@ FOOTER_TEXT = ["[H]elp", "[Q]uit"]
 NAME_REGEX = r"^[\S\s]+$"
 
 ONI_ENEMIES = {
-    "Level 1": {"name": "test", "hp": 750, "damage": 10, "gimmick": "normal"},
-    "Level 2": {"name": "test", "hp": 900, "damage": 25, "gimmick": "normal"},
-    "Level 3": {"name": "test", "hp": 1100, "damage": 50, "gimmick": "normal"},
-    "Level 4": {"name": "test", "hp": 1250, "damage": 75, "gimmick": "normal"},
-    "Level 5": {"name": "test", "hp": 2000, "damage": 100, "gimmick": "normal"},
+    "Level 1": {"name": "Void Oni", "hp": 750, "damage": 10},
+    "Level 2": {"name": "Frost Oni", "hp": 900, "damage": 25},
+    "Level 3": {"name": "Thunder Oni", "hp": 1100, "damage": 50},
+    "Level 4": {"name": "Venom Oni", "hp": 1250, "damage": 75},
+    "Level 5": {"name": "Blood Oni", "hp": 2000, "damage": 100},
 }
+
+GAME_INTRO = """
+Greetings <Username>,
+
+Your adventure begins here.
+You will face some Oni who want to play a basic pin guessing game.
+The goal of this game is to get through it with the fewest guesses possible.
+
+The pin always consists of 4 digits within a set range, which you may or may not get to know based on your decisions.
+After each guess, the Oni will tell you if a number is present but not in the correct spot [O], or if it is present and in the correct spot [X].
+It is important to note that the signs [O] and [X] do not provide any hints about which number is indicated by their position.
+
+Good luck and have fun.
+
+PRESS ENTER TO START
+"""

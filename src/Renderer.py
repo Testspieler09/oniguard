@@ -20,6 +20,7 @@ from curses import (
 )
 from pyperclip import copy
 from re import match
+from random import choice
 from ast import literal_eval
 from textwrap import wrap
 from os.path import split, join
@@ -38,6 +39,7 @@ from assets import (
     NAME_REGEX,
     ASCII_ONI_LOGO,
     ONI_ENEMIES,
+    GAME_INTRO,
 )
 from time import sleep
 from logging import getLogger
@@ -46,21 +48,35 @@ logger = getLogger(__name__)
 
 
 class OniManager:
-    def __init__(self, data: dict) -> None:
-        self.name = data["name"]
-        self.max_hp = data["hp"]
-        self.hp = data["hp"]
-        self.damage = data["damage"]
-        self.ko = False
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.player = Entity({"name": name, "hp": 500, "damage": 50})
         self.num_guesses = 0
         self.leaderboard = self.get_leaderboard()
+
+        # some screen settings
+        self.screen = initscr()
+        self.dimensions = self.screen.getmaxyx()
+        curs_set(0)
+        cbreak()
+        noecho()
+        self.screen.nodelay(False)
+        self.screen.keypad(True)
+
+        # COLOR STUFF FOR IMPORTANCE
+        start_color()
+        init_pair(2, COLOR_BLUE, COLOR_BLACK)
+
+        # CLEAR SCREEN AND RUN IT
+        self.screen.clear()
+        self.screen.refresh()
         self.run_game()
 
-    def __str__(self) -> str:
-        healthbar = "=" * round(10 * self.hp / self.max_hp)
-        return (
-            f"{self.name} {healthbar if healthbar != '' and not self.is_ko() else ':'}"
-        )
+    def kill_scr(self) -> None:
+        nocbreak()
+        self.screen.keypad(False)
+        echo()
+        endwin()
 
     @staticmethod
     def get_leaderboard() -> None:
@@ -84,12 +100,210 @@ class OniManager:
         with open(join("..", "userdata", ".leaderboard"), "w") as f:
             f.write(str(self.leaderboard))
 
-    @classmethod
-    def init_player(cls, name: str) -> None:
-        cls({"name": name, "hp": 500, "damage": 50})
-
     def run_game(self) -> None:
+        headline = "Oni Guessing Gauntlet"
+        self.screen.addstr(
+            self.dimensions[0] - 1,
+            0,
+            Renderer.space_footer_text(
+                self.screen,
+                [
+                    "[O] right number, wrong position",
+                    "[X] right number, right position",
+                ],
+            ),
+        )
+        _, x = Renderer.get_coordinates_for_centered_text(self.screen, headline)
+        self.screen.addstr(1, x, headline, A_UNDERLINE)
+        self.intro()
+        self.start_lvl_one()
+        self.start_lvl_two()
+        self.start_lvl_three()
+        self.start_lvl_four()
+        self.start_lvl_five()
+        self.add_leaderboard()
+
+    def show_map_and_oni_lvl(self, lvl: int) -> None:
         pass
+
+    def game_over(self) -> None:
+        # show leaderboard and progress (guesses and lvl)
+        pass
+
+    def guess_pin(self, settings: dict) -> None:
+        pass
+
+    def intro(self) -> None:
+        intro = GAME_INTRO.replace("<Username>", self.name)
+        message = PopUp.make_message_fit_width(intro, self.dimensions[1] - 2)
+        scroll_y = 0
+        pad_dimensions = (
+            len(message.splitlines()) + 1,
+            max(len(i) for i in message.splitlines()) + 1,
+        )
+        pad = newpad(
+            (
+                pad_dimensions[0]
+                if pad_dimensions[0] >= self.dimensions[0]
+                else self.dimensions[0] - 2
+            ),
+            (
+                pad_dimensions[1]
+                if pad_dimensions[1] >= self.dimensions[1]
+                else self.dimensions[1]
+            ),
+        )
+        pad.addstr(message)
+        pad.box()
+        pad.refresh(scroll_y, 0, 2, 0, self.dimensions[0] - 2, self.dimensions[1] - 1)
+        while True:
+            key = self.screen.getkey()
+            match key.lower():
+                case "key_down":
+                    if pad_dimensions[0] - scroll_y + 3 <= self.dimensions[0]:
+                        continue
+                    scroll_y += 1
+                    pad.refresh(
+                        scroll_y,
+                        0,
+                        2,
+                        0,
+                        self.dimensions[0] - 2,
+                        self.dimensions[1] - 1,
+                    )
+                case "key_up":
+                    scroll_y -= 1
+                    if scroll_y < 0:
+                        scroll_y = 0
+                    pad.refresh(
+                        scroll_y,
+                        0,
+                        2,
+                        0,
+                        self.dimensions[0] - 2,
+                        self.dimensions[1] - 1,
+                    )
+                case "\n":
+                    break
+                case "key_resize" | "q":
+                    self.kill_scr()
+                    exit()
+
+    def start_lvl_one(self) -> None:
+        self.guess_pin(
+            {
+                "enemy": ONI_ENEMIES["Level 1"],
+                "numbers twice": False,
+                "range": [1, 6],
+                "limit": None,
+                "hidden": [0, 0, 0],
+            }
+        )
+
+    def start_lvl_two(self) -> None:
+        self.guess_pin(
+            {
+                "enemy": ONI_ENEMIES["Level 2"],
+                "numbers twice": True,
+                "range": [1, 6],
+                "limit": 8,
+                "hidden": [0, 0, 0],
+            }
+        )
+
+    def start_lvl_three(self) -> None:
+        idx, _ = PopUp(self.screen).get_input_radio_btn(
+            ["-5 guesses", "Know if numbers can be contained twice"],
+            "Make your selection.",
+        )
+        numbers_twice = choice([0, 1])
+        self.guess_pin(
+            {
+                "enemy": ONI_ENEMIES["Level 3"],
+                "numbers twice": numbers_twice,
+                "range": [1, 9],
+                "limit": 15,
+                "hidden": [idx, 0, 0],
+            }
+        )
+
+    def start_lvl_four(self) -> None:
+        idx, _ = PopUp(self.screen).get_input_radio_btn(
+            ["-8 guesses", "Unhide the range of numbers"], "Make your selection."
+        )
+        numbers_twice = choice([0, 1])
+        range_of_nums = choice(
+            [
+                [0, 9],
+                [1, 9],
+                [2, 9],
+                [3, 9],
+                [4, 9],
+                [0, 8],
+                [1, 8],
+                [2, 8],
+                [3, 8],
+                [0, 7],
+                [1, 7],
+                [2, 7],
+                [0, 6],
+                [1, 6],
+            ]
+        )
+        self.guess_pin(
+            {
+                "enemy": ONI_ENEMIES["Level 4"],
+                "numbers twice": numbers_twice,
+                "range": range_of_nums,
+                "limit": 15,
+                "hidden": [0, idx, 0],
+            }
+        )
+
+    def start_lvl_five(self) -> None:
+        numbers_twice = choice([0, 1])
+        range_of_nums = choice(
+            [
+                [0, 9],
+                [1, 9],
+                [2, 9],
+                [3, 9],
+                [4, 9],
+                [0, 8],
+                [1, 8],
+                [2, 8],
+                [3, 8],
+                [0, 7],
+                [1, 7],
+                [2, 7],
+                [0, 6],
+                [1, 6],
+            ]
+        )
+        self.guess_pin(
+            {
+                "enemy": ONI_ENEMIES["Level 5"],
+                "numbers twice": numbers_twice,
+                "range": range_of_nums,
+                "limit": 8,
+                "hidden": [1, 1, 0],
+            }
+        )
+
+
+class Entity:
+    def __init__(self, data: dict) -> None:
+        self.name = data["name"]
+        self.max_hp = data["hp"]
+        self.hp = data["hp"]
+        self.damage = data["damage"]
+        self.ko = False
+
+    def __str__(self) -> str:
+        healthbar = "=" * round(10 * self.hp / self.max_hp)
+        return (
+            f"{self.name} {healthbar if healthbar != '' and not self.is_ko() else ':'}"
+        )
 
     def is_ko(self) -> bool:
         if self.ko:
@@ -310,7 +524,7 @@ class PopUp:
 
 class Renderer:
     def __init__(
-            self, data_mng: object, beautified_content=None, pointer_idx=None
+        self, data_mng: object, beautified_content=None, pointer_idx=None
     ) -> None:
         self.screen = initscr()
         self.data = data_mng
@@ -319,7 +533,7 @@ class Renderer:
         # DETERMINE THE SIZE OF THE MAIN PAD
         y, x = self.get_main_dimensions()
 
-        help_lines = HELP_MESSAGE.split("\n")
+        help_lines = HELP_MESSAGE.splitlines()
         self.window_dimensions = [
             self.screen.getmaxyx(),
             (y, x),
@@ -388,10 +602,13 @@ class Renderer:
     def run_scr(self) -> None:
         headline = "OniGuard"
         self.output_text_to_window(
-            0, self.space_footer_text(FOOTER_TEXT), self.window_dimensions[0][0] - 1, 0
+            0,
+            self.space_footer_text(self.screen, FOOTER_TEXT),
+            self.window_dimensions[0][0] - 1,
+            0,
         )
-        y, _ = self.get_coordinates_for_centered_text(headline)
-        self.output_text_to_window(0, headline, 1, y, A_UNDERLINE)
+        _, x = self.get_coordinates_for_centered_text(self.screen, headline)
+        self.output_text_to_window(0, headline, 1, x, A_UNDERLINE)
         self.update_scr()
         while self.running:
             sleep(0.01)  # so program doesn't use 100% cpu
@@ -670,7 +887,8 @@ class Renderer:
         options = self.data.get_entries_anonymised_with_hash([i[0] for i in elements])
         options.insert(0, ["", "Cancel"])
         idx, _ = PopUp(self.screen).get_input_radio_btn(
-            [str(i[1]) for i in options], "What entry do you want to set the pointer to?"
+            [str(i[1]) for i in options],
+            "What entry do you want to set the pointer to?",
         )
         if idx == 0:
             self.update_scr()
@@ -996,10 +1214,13 @@ class Renderer:
         self.screen.clear()
         headline = "OniGuard"
         self.output_text_to_window(
-            0, self.space_footer_text(FOOTER_TEXT), self.window_dimensions[0][0] - 1, 0
+            0,
+            self.space_footer_text(self.screen, FOOTER_TEXT),
+            self.window_dimensions[0][0] - 1,
+            0,
         )
-        y, _ = self.get_coordinates_for_centered_text(headline)
-        self.output_text_to_window(0, headline, 1, y, A_UNDERLINE)
+        _, x = self.get_coordinates_for_centered_text(self.screen, headline)
+        self.output_text_to_window(0, headline, 1, x, A_UNDERLINE)
         self.windows[1].refresh(
             self.scroll_y,
             self.scroll_x,
@@ -1117,11 +1338,12 @@ class Renderer:
         except:
             return None
 
-    def get_coordinates_for_centered_text(self, text: str) -> tuple[int]:
-        height, width = self.window_dimensions[0]
+    @staticmethod
+    def get_coordinates_for_centered_text(stdscr: object, text: str) -> tuple[int]:
+        height, width = stdscr.getmaxyx()
         start_y = height // 2
         start_x = (width // 2) - (len(text) // 2)
-        return start_x, start_y - 1
+        return start_y - 1, start_x
 
     def get_coordinates_for_centered_pad(self, win: int) -> list[int]:
         """
@@ -1146,11 +1368,10 @@ class Renderer:
         return start_coords
 
     # Text manipulation and output methods
-    def space_footer_text(self, footer_text: list) -> str:
+    @staticmethod
+    def space_footer_text(stdscr: object, footer_text: list) -> str:
         char_amount = len("".join(footer_text))
-        width = (self.window_dimensions[0][1] - 1 - char_amount) // (
-            len(footer_text) - 1
-        )
+        width = (stdscr.getmaxyx()[1] - 1 - char_amount) // (len(footer_text) - 1)
         return "".join([arg + " " * width for arg in footer_text]).strip()
 
     def output_text_to_window(self, win: int, text: str, y=0, x=0, *args) -> None:
@@ -1190,4 +1411,4 @@ if __name__ == "__main__":
     dm = DataManager("..\\userdata\\test\\test.data", key)
     renderer = Renderer(dm)
     # game
-    player = OniManager.init_player("test")
+    player = OniManager("test")

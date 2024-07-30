@@ -234,19 +234,22 @@ class DataManager(FileManager):
             options.append(
                 [
                     entry[0],
-                    " | ".join(str(i[0]) for i in self.apply_constraints_to_data(
-                        list(
-                            zip(
-                                entry[1]["values"],
-                                (
-                                    i[1]
-                                    for i in self.data["schemes"][
-                                        entry[1]["scheme_hash"]
-                                    ]
-                                ),
+                    " | ".join(
+                        str(i[0])
+                        for i in self.apply_constraints_to_data(
+                            list(
+                                zip(
+                                    entry[1]["values"],
+                                    (
+                                        i[1]
+                                        for i in self.data["schemes"][
+                                            entry[1]["scheme_hash"]
+                                        ]
+                                    ),
+                                )
                             )
-                        )
-                        )[:-2]),
+                        )[:-2]
+                    ),
                 ]
             )
         return options
