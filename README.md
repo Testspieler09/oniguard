@@ -88,6 +88,14 @@ Q -> [Q]uit program
 
 To select or deselect a checkbox just press the spacebar.
 
+### Game stuck on the map / progress screen
+
+Just press `ENTER` to continue.
+
+### Program crashes
+
+The most likely thing to happen is that the window / screen is to small to display all contents. Try again after resizing your window with `CTRL + -`.
+
 ## Installation
 
 On Microsoft Windows run

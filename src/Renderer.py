@@ -19,8 +19,10 @@ from curses import (
     A_NORMAL,
 )
 from pyperclip import copy
+from prettytable import PrettyTable
 from re import match
-from random import choice
+from random import choices, choice, sample
+from collections import Counter
 from ast import literal_eval
 from textwrap import wrap
 from os.path import split, join
@@ -92,7 +94,6 @@ class OniManager:
 
         self.leaderboard.append([self.name, self.num_guesses])
         self.leaderboard.sort(key=lambda x: x[1])
-        print(self.leaderboard)
 
         if len(self.leaderboard) >= 5:
             self.leaderboard = self.leaderboard[:5]
@@ -102,17 +103,20 @@ class OniManager:
 
     def run_game(self) -> None:
         headline = "Oni Guessing Gauntlet"
-        self.screen.addstr(
-            self.dimensions[0] - 1,
-            0,
-            Renderer.space_footer_text(
-                self.screen,
-                [
-                    "[O] right number, wrong position",
-                    "[X] right number, right position",
-                ],
-            ),
-        )
+        try:
+            self.screen.addstr(
+                self.dimensions[0] - 1,
+                0,
+                Renderer.space_footer_text(
+                    self.screen,
+                    [
+                        "[O] right number, wrong position",
+                        "[X] right number, right position",
+                    ],
+                ),
+            )
+        except:
+            logger.critical("Couldn't display footer")
         _, x = Renderer.get_coordinates_for_centered_text(self.screen, headline)
         self.screen.addstr(1, x, headline, A_UNDERLINE)
         self.intro()
@@ -122,15 +126,223 @@ class OniManager:
         self.start_lvl_four()
         self.start_lvl_five()
         self.add_leaderboard()
+        self.game_over()
 
     def show_map_and_oni_lvl(self, lvl: int) -> None:
-        pass
+        headline = f"{ONI_ENEMIES[f'Level {lvl}']['name']} | Level {lvl} | Guesses: {self.num_guesses}"
+        map_progress = " -> ".join(
+            [
+                "[:]" if lvl - 1 > i else "[X]" if lvl - 1 == i else "[ ]"
+                for i in range(5)
+            ]
+        )
+        width = max(len(headline), len(map_progress)) + 2
+        pad = newpad(
+            5 if 5 >= self.dimensions[0] - 3 else self.dimensions[0] - 3,
+            width if width >= self.dimensions[1] else self.dimensions[1],
+        )
+        pad.box()
+        headline_y, headline_x = Renderer.get_coordinates_for_centered_text(
+            self.screen, headline
+        )
+        headline_y, headline_x = headline_y - 2 if headline_y - 2 > 0 else 1, (
+            headline_x if headline_x > 0 else 1
+        )
+        map_y, map_x = Renderer.get_coordinates_for_centered_text(
+            self.screen, map_progress
+        )
+        pad.addstr(headline_y, headline_x, headline, A_UNDERLINE)
+        pad.addstr(map_y if map_y - 1 != headline_y else map_y + 1, map_x, map_progress)
+        pad.refresh(0, 0, 2, 0, self.dimensions[0] - 1, self.dimensions[1] - 1)
+        scroll_y, scroll_x = 0, 0
+        self.screen.nodelay(False)
+        while True:
+            key = self.screen.getkey()
+            match key.lower():
+                case "key_down":
+                    if 5 - scroll_y + 2 <= self.dimensions[0]:
+                        continue
+                    scroll_y += 1
+                    pad.refresh(
+                        scroll_y,
+                        scroll_x,
+                        2,
+                        0,
+                        self.dimensions[0] - 1,
+                        self.dimensions[1] - 1,
+                    )
+                case "key_up":
+                    scroll_y -= 1
+                    if scroll_y < 0:
+                        scroll_y = 0
+                    pad.refresh(
+                        scroll_y,
+                        scroll_x,
+                        2,
+                        0,
+                        self.dimensions[0] - 1,
+                        self.dimensions[1] - 1,
+                    )
+                case "key_left":
+                    if scroll_x > 0:
+                        scroll_x -= 1
+                    pad.refresh(
+                        scroll_y,
+                        scroll_x,
+                        2,
+                        0,
+                        self.dimensions[0] - 1,
+                        self.dimensions[1] - 1,
+                    )
+                case "key_right":
+                    if scroll_x < width - self.dimensions[1]:
+                        scroll_x += 1
+                    pad.refresh(
+                        scroll_y,
+                        scroll_x,
+                        2,
+                        0,
+                        self.dimensions[0] - 1,
+                        self.dimensions[1] - 1,
+                    )
+                case "\n":
+                    break
+                case "key_resize" | "q":
+                    self.kill_scr()
+                    exit()
 
-    def game_over(self) -> None:
-        # show leaderboard and progress (guesses and lvl)
-        pass
+    def game_over(self, died_early=False) -> None:
+        scroll_y, scroll_x = 0, 0
+        table = PrettyTable()
+        table.field_names = ["Nr.", "Name", "Guesses"]
+        output = "LEADERBOARD\n"
+        for num, i in enumerate(self.leaderboard):
+            table.add_row([num + 1] + i)
+        output += table.__str__()
+        if died_early:
+            output += f"\nYour guesses till now: {self.num_guesses}"
+        output += "\n\nPRESS ENTER to continue"
+        height, width = (
+            len(output.splitlines()) + 2,
+            max(len(i) for i in output.splitlines()) + 2,
+        )
+        pad = newpad(
+            height if height >= self.dimensions[0] - 2 else self.dimensions[0] - 2,
+            width if width >= self.dimensions[1] else self.dimensions[1],
+        )
+        dimensions = pad.getmaxyx()
+        pad.box()
+        y, x = (
+            2
+            if height >= self.dimensions[0] - 3
+            else self.dimensions[0] // 2 - height // 2
+        ), (
+            1
+            if width >= self.dimensions[1] - 1
+            else self.dimensions[1] // 2 - width // 2 - 1
+        )
+        for i, line in enumerate(output.splitlines()):
+            pad.addstr(y + i - 1, x, line)
+        pad.refresh(
+            scroll_y, scroll_x, 2, 0, self.dimensions[0] - 1, self.dimensions[1] - 1
+        )
+        while True:
+            key = self.screen.getkey()
+            match key.lower():
+                case "key_down":
+                    if height - scroll_y + 2 <= self.dimensions[0]:
+                        continue
+                    scroll_y += 1
+                    pad.refresh(
+                        scroll_y,
+                        scroll_x,
+                        2,
+                        0,
+                        self.dimensions[0] - 1,
+                        self.dimensions[1] - 1,
+                    )
+                case "key_up":
+                    scroll_y -= 1
+                    if scroll_y < 0:
+                        scroll_y = 0
+                    pad.refresh(
+                        scroll_y,
+                        scroll_x,
+                        2,
+                        0,
+                        self.dimensions[0] - 1,
+                        self.dimensions[1] - 1,
+                    )
+                case "key_left":
+                    if scroll_x > 0:
+                        scroll_x -= 1
+                    pad.refresh(
+                        scroll_y,
+                        scroll_x,
+                        2,
+                        0,
+                        self.dimensions[0] - 1,
+                        self.dimensions[1] - 1,
+                    )
+                case "key_right":
+                    if scroll_x < dimensions[1] - self.dimensions[1]:
+                        scroll_x += 1
+                    pad.refresh(
+                        scroll_y,
+                        scroll_x,
+                        2,
+                        0,
+                        self.dimensions[0] - 1,
+                        self.dimensions[1] - 1,
+                    )
+                case "\n":
+                    break
+                case "key_resize" | "q":
+                    self.kill_scr()
+                    exit()
+
+    @staticmethod
+    def evaluate_guess(pin: str, guess: str) -> list[int]:
+        pin_matched = [False] * 4
+        guess_matched = [False] * 4
+
+        pin_count = Counter(pin)
+        guess_count = Counter(guess)
+
+        # First pass: Check for exact matches (right number, right position)
+        for i, (p_num, g_num) in enumerate(zip(pin, guess)):
+            if g_num != p_num:
+                continue
+            pin_matched[i], guess_matched[i] = True, True
+            pin_count[g_num] -= 1
+            guess_count[g_num] -= 1
+
+        # Second pass: Check for right number, wrong position
+        for idx, g_num in enumerate(guess):
+            if guess_matched[idx] or guess_count[g_num] <= 0:
+                continue
+            for j, p_num in enumerate(pin):
+                if pin_matched[j] or g_num != p_num:
+                    continue
+                pin_matched[j] = True
+                pin_count[g_num] -= 1
+                break
+
+        return sorted((i + j for i, j in zip(pin_matched, guess_matched)), reverse=True)
+
+    @staticmethod
+    def gen_pin(numbers_twice: bool) -> str:
+        if numbers_twice:
+            pin = "".join(choices("0123456789", k=4))
+        else:
+            pin = "".join(sample("0123456789", 4))
+        return pin
 
     def guess_pin(self, settings: dict) -> None:
+        pin = self.gen_pin(settings["numbers twice"])
+        print(pin)
+        # main elements in main pad (healthbars, settings)
+        # game in a smaller pad in middle
         pass
 
     def intro(self) -> None:
@@ -144,8 +356,8 @@ class OniManager:
         pad = newpad(
             (
                 pad_dimensions[0]
-                if pad_dimensions[0] >= self.dimensions[0]
-                else self.dimensions[0] - 2
+                if pad_dimensions[0] + 3 >= self.dimensions[0]
+                else self.dimensions[0] - 3
             ),
             (
                 pad_dimensions[1]
@@ -190,6 +402,7 @@ class OniManager:
                     exit()
 
     def start_lvl_one(self) -> None:
+        self.show_map_and_oni_lvl(1)
         self.guess_pin(
             {
                 "enemy": ONI_ENEMIES["Level 1"],
@@ -201,6 +414,7 @@ class OniManager:
         )
 
     def start_lvl_two(self) -> None:
+        self.show_map_and_oni_lvl(2)
         self.guess_pin(
             {
                 "enemy": ONI_ENEMIES["Level 2"],
@@ -212,10 +426,13 @@ class OniManager:
         )
 
     def start_lvl_three(self) -> None:
+        self.show_map_and_oni_lvl(3)
         idx, _ = PopUp(self.screen).get_input_radio_btn(
             ["-5 guesses", "Know if numbers can be contained twice"],
             "Make your selection.",
         )
+        if idx == 0:
+            self.num_guesses -= 5
         numbers_twice = choice([0, 1])
         self.guess_pin(
             {
@@ -228,9 +445,12 @@ class OniManager:
         )
 
     def start_lvl_four(self) -> None:
+        self.show_map_and_oni_lvl(4)
         idx, _ = PopUp(self.screen).get_input_radio_btn(
             ["-8 guesses", "Unhide the range of numbers"], "Make your selection."
         )
+        if idx == 0:
+            self.num_guesses -= 8
         numbers_twice = choice([0, 1])
         range_of_nums = choice(
             [
@@ -261,6 +481,7 @@ class OniManager:
         )
 
     def start_lvl_five(self) -> None:
+        self.show_map_and_oni_lvl(5)
         numbers_twice = choice([0, 1])
         range_of_nums = choice(
             [
@@ -512,14 +733,16 @@ class PopUp:
     # Helper methods
     @staticmethod
     def make_message_fit_width(message: str, width: int) -> str:
+        hash = (
+            "dbc71b7fc9e348da85ae5e095bd80855"
+            if len("dbc71b7fc9e348da85ae5e095bd80855") < width
+            else "8da85"
+        )
         paras = [
-            "dbc71b7fc9e348da85ae5e095bd80855" if i == "" else i
-            for i in message.splitlines()
+            hash if i == "" else i for i in message.splitlines()
         ]  # using a uuid4 here to preserve the custom linespacing via `\n`
         lines = [" " + j for i in paras for j in wrap(i, width)]
-        return "\n".join(
-            ["" if i == " dbc71b7fc9e348da85ae5e095bd80855" else i for i in lines]
-        )
+        return "\n".join(["" if i == f" {hash}" else i for i in lines])
 
 
 class Renderer:
