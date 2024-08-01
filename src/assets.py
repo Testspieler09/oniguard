@@ -179,6 +179,10 @@ The pin always consists of 4 digits within a set range, which you may or may not
 After each guess, the Oni will tell you if a number is present but not in the correct spot [O], or if it is present and in the correct spot [X].
 It is important to note that the signs [O] and [X] do not provide any hints about which number is indicated by their position.
 
+During the game you can scroll up and down with the arrow keys.
+To input a guess press `Enter` and for a final guess `F`.
+If you use your final guess and it is correct it will reduce your guess total by 2 guesses otherwise you will get attacked by the Oni.
+
 Good luck and have fun.
 
 PRESS ENTER TO START

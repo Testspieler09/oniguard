@@ -239,7 +239,7 @@ class OniManager:
         ), (
             1
             if width >= self.dimensions[1] - 1
-            else self.dimensions[1] // 2 - width // 2 - 1
+            else self.dimensions[1] // 2 - width // 2 + 1
         )
         for i, line in enumerate(output.splitlines()):
             pad.addstr(y + i - 1, x, line)
@@ -295,18 +295,34 @@ class OniManager:
                         self.dimensions[0] - 1,
                         self.dimensions[1] - 1,
                     )
-                case "\n":
-                    break
-                case "key_resize" | "q":
+                case "key_resize" | "q" | "\n":
                     self.kill_scr()
                     exit()
+
+    def gen_settings_output(self, settings: dict) -> str:
+        # Numbers twice
+        output = "RULES\nNumbers can be twice: "
+        if not settings["hidden"][0]:
+            output += "yes\n" if settings["numbers twice"] else "no\n"
+        else:
+            output += "???\n"
+        # Range
+        output += "Range: "
+        if not settings["hidden"][1]:
+            output += f"{settings['range'][0]} to {settings['range'][1]}\n"
+        else:
+            output += "???\n"
+        # Limit
+        output += "Max. guesses: "
+        output += str(settings["limit"]) if settings["limit"] != None else "∞"
+
+        return output
 
     @staticmethod
     def evaluate_guess(pin: str, guess: str) -> list[int]:
         pin_matched = [False] * 4
         guess_matched = [False] * 4
 
-        pin_count = Counter(pin)
         guess_count = Counter(guess)
 
         # First pass: Check for exact matches (right number, right position)
@@ -314,7 +330,6 @@ class OniManager:
             if g_num != p_num:
                 continue
             pin_matched[i], guess_matched[i] = True, True
-            pin_count[g_num] -= 1
             guess_count[g_num] -= 1
 
         # Second pass: Check for right number, wrong position
@@ -325,25 +340,235 @@ class OniManager:
                 if pin_matched[j] or g_num != p_num:
                     continue
                 pin_matched[j] = True
-                pin_count[g_num] -= 1
                 break
 
         return sorted((i + j for i, j in zip(pin_matched, guess_matched)), reverse=True)
 
     @staticmethod
-    def gen_pin(numbers_twice: bool) -> str:
+    def gen_pin(numbers_twice: bool, num_range: list) -> str:
         if numbers_twice:
-            pin = "".join(choices("0123456789", k=4))
+            pin = "".join(
+                choices(
+                    "".join(str(i) for i in range(num_range[0], num_range[1] + 1)), k=4
+                )
+            )
         else:
-            pin = "".join(sample("0123456789", 4))
+            pin = "".join(
+                sample(
+                    "".join(str(i) for i in range(num_range[0], num_range[1] + 1)), 4
+                )
+            )
         return pin
 
+    @staticmethod
+    def update_game_pad(pad: object, guess_num: int, data: dict) -> None:
+        message = f" {data['pin'][0]} | {data['pin'][1]} | {data['pin'][2]} | {data['pin'][3]} [{'|'.join(' X ' if i==2 else ' O ' if i == 1 else '   ' for i in data['evaluation'])}]"
+        pad.addstr(guess_num, 1, message)
+
     def guess_pin(self, settings: dict) -> None:
-        pin = self.gen_pin(settings["numbers twice"])
-        print(pin)
-        # main elements in main pad (healthbars, settings)
-        # game in a smaller pad in middle
-        pass
+        guess_num = 0
+        pin = self.gen_pin(settings["numbers twice"], settings["range"])
+        enemy = Entity(settings["enemy"])
+        settings_output = self.gen_settings_output(settings)
+
+        win = newwin(self.dimensions[0] - 3, self.dimensions[1], 2, 0)
+        # Enemy healthbar
+        enemy_str = enemy.__str__()
+        enemy_win = newwin(
+            1, len(enemy_str) + 1, 4, self.dimensions[1] - len(enemy_str) - 2
+        )
+        enemy_win.addstr(enemy_str)
+        # Rules
+        for i, line in enumerate(settings_output.splitlines()):
+            win.addstr(1 + i, 1, line)
+        # Player health
+        player_str = self.player.__str__()
+        player_win = newwin(1, len(player_str) + 1, self.dimensions[0] - 6, 2)
+        player_win.addstr(player_str)
+        # Instruction
+        win.addstr(self.dimensions[0] - 6, 1, "Press `ENTER` or `F`")
+        win.box()
+        win.refresh()
+
+        message = f"Total guessses: {self.num_guesses}"
+        _, centered_message_x = Renderer.get_coordinates_for_centered_text(
+            self.screen, message
+        )
+        total_guesses_win = newwin(1, len(message) + 3, 3, centered_message_x)
+        total_guesses_win.addstr(message)
+
+
+        total_guesses_win.refresh()
+        player_win.refresh()
+        enemy_win.refresh()
+
+        height, width = settings["limit"] + 2 if settings["limit"] != None else 100, 34
+        game_pad = newpad(height, width)
+        game_pad.box()
+        centered_pad_y, centered_pad_x = (
+            self.dimensions[0] - 3
+        ) // 2 - height // 2 + 2, (self.dimensions[1]) // 2 - width // 2
+        # Print game
+        for line in range(height - 2):
+            game_pad.addstr(line + 1, 1, "   |   |   |   [   |   |   |   ]")
+        game_pad.refresh(
+            0,
+            0,
+            centered_pad_y if centered_pad_y > 4 else 4,
+            centered_pad_x,
+            self.dimensions[0] - 6,
+            centered_pad_x + width,
+        )
+        self.screen.nodelay(False)
+        scroll_y = 0
+        while True:
+            key = self.screen.getkey()
+            match key.lower():
+                case "key_up":
+                    if scroll_y == 0:
+                        continue
+                    scroll_y -= 1
+                    game_pad.refresh(
+                        scroll_y,
+                        0,
+                        centered_pad_y if centered_pad_y > 4 else 4,
+                        centered_pad_x,
+                        self.dimensions[0] - 6,
+                        centered_pad_x + width,
+                    )
+                case "key_down":
+                    if height - scroll_y + 9 <= self.dimensions[0]:
+                        continue
+                    scroll_y += 1
+                    game_pad.refresh(
+                        scroll_y,
+                        0,
+                        centered_pad_y if centered_pad_y > 4 else 4,
+                        centered_pad_x,
+                        self.dimensions[0] - 6,
+                        centered_pad_x + width,
+                    )
+                case "\n":
+                    echo()
+                    curs_set(1)
+                    self.screen.move(self.dimensions[0] - 3, 1)
+                    self.screen.clrtoeol()
+                    input = self.screen.getstr(self.dimensions[0] - 3, 1, 4).decode()
+                    curs_set(0)
+                    noecho()
+
+                    if not match(r"^\d\d\d\d$", input):
+                        continue
+
+                    guess_num += 1
+                    self.num_guesses += 1
+
+                    total_guesses_win.addstr(0, 16, str(self.num_guesses))
+                    total_guesses_win.refresh()
+                    evaluation = self.evaluate_guess(pin, input)
+
+                    self.player.convert_evaluation_to_damage(evaluation)
+                    self.player._damage(enemy)
+                    enemy_win.move(0,0)
+                    enemy_win.clrtoeol()
+                    enemy_win.addstr(0, 0, enemy.__str__())
+                    enemy_win.refresh()
+
+                    self.update_game_pad(
+                        game_pad, guess_num, {"pin": input, "evaluation": evaluation}
+                    )
+
+                    if self.dimensions[0] - 10 <= guess_num:
+                        scroll_y = guess_num + 10 - self.dimensions[0]
+
+                    game_pad.refresh(
+                        scroll_y,
+                        0,
+                        centered_pad_y if centered_pad_y > 4 else 4,
+                        centered_pad_x,
+                        self.dimensions[0] - 6,
+                        centered_pad_x + width,
+                    )
+
+                    if all(i == 2 for i in evaluation):
+                        sleep(2)
+                        break
+
+                    reached_max_guesses = (
+                        settings["limit"] == None and guess_num == height - 2
+                    ) or (settings["limit"] != None and guess_num == settings["limit"])
+                    if reached_max_guesses:
+                        sleep(2)
+                        self.game_over(died_early=True)
+
+                case "f":
+                    echo()
+                    curs_set(1)
+                    self.screen.move(self.dimensions[0] - 3, 1)
+                    self.screen.clrtoeol()
+                    input = self.screen.getstr(self.dimensions[0] - 3, 1, 4).decode()
+                    curs_set(0)
+                    noecho()
+
+                    if not match(r"^\d\d\d\d$", input):
+                        continue
+
+                    evaluation = self.evaluate_guess(pin, input)
+
+                    self.player.convert_evaluation_to_damage(evaluation)
+                    self.player._damage(enemy)
+                    enemy_win.move(0,0)
+                    enemy_win.clrtoeol()
+                    enemy_win.addstr(0, 0, enemy.__str__())
+                    enemy_win.refresh()
+
+                    if all(i == 2 for i in evaluation):
+                        self.num_guesses -= 2
+                        sleep(2)
+                        break
+
+                    guess_num += 1
+                    self.num_guesses += 1
+
+                    self.update_game_pad(
+                        game_pad, guess_num, {"pin": input, "evaluation": evaluation}
+                    )
+
+                    if self.dimensions[0] - 10 <= guess_num:
+                        scroll_y = guess_num + 10 - self.dimensions[0]
+
+                    game_pad.refresh(
+                        scroll_y,
+                        0,
+                        centered_pad_y if centered_pad_y > 4 else 4,
+                        centered_pad_x,
+                        self.dimensions[0] - 6,
+                        centered_pad_x + width,
+                    )
+
+                    total_guesses_win.addstr(0, 16, str(self.num_guesses))
+                    total_guesses_win.refresh()
+
+                    enemy.convert_evaluation_to_damage([choice([0,1,2]) for _ in range(4)])
+                    enemy._damage(self.player, is_player=True)
+                    player_win.move(0, 0)
+                    player_win.clrtoeol()
+                    player_win.addstr(0, 0, self.player.__str__())
+                    player_win.refresh()
+
+                    reached_max_guesses = (
+                        settings["limit"] == None and guess_num == height
+                    ) or (settings["limit"] != None and guess_num == settings["limit"])
+
+                    if reached_max_guesses or self.player.is_ko:
+                        sleep(2)
+                        self.game_over(died_early=True)
+
+                case "key_resize" | "q":
+                    self.kill_scr()
+                    exit()
+
+        del win, enemy_win, player_win, total_guesses_win
 
     def intro(self) -> None:
         intro = GAME_INTRO.replace("<Username>", self.name)
@@ -440,7 +665,7 @@ class OniManager:
                 "numbers twice": numbers_twice,
                 "range": [1, 9],
                 "limit": 15,
-                "hidden": [idx, 0, 0],
+                "hidden": [1 - idx, 0, 0],
             }
         )
 
@@ -476,7 +701,7 @@ class OniManager:
                 "numbers twice": numbers_twice,
                 "range": range_of_nums,
                 "limit": 15,
-                "hidden": [0, idx, 0],
+                "hidden": [0, 1 - idx, 0],
             }
         )
 
@@ -510,6 +735,44 @@ class OniManager:
                 "hidden": [1, 1, 0],
             }
         )
+        choice, _ = PopUp(self.screen).get_input_radio_btn(
+            ["-50% of guesses for winning another game", "end this torture"],
+            "What would you like to do?",
+        )
+        if choice == 1:
+            self.kill_scr()
+            exit()
+
+        self.show_map_and_oni_lvl(5)
+        numbers_twice = choice([0, 1])
+        range_of_nums = choice(
+            [
+                [0, 9],
+                [1, 9],
+                [2, 9],
+                [3, 9],
+                [4, 9],
+                [0, 8],
+                [1, 8],
+                [2, 8],
+                [3, 8],
+                [0, 7],
+                [1, 7],
+                [2, 7],
+                [0, 6],
+                [1, 6],
+            ]
+        )
+        self.guess_pin(
+            {
+                "enemy": ONI_ENEMIES["Level 5"],
+                "numbers twice": numbers_twice,
+                "range": range_of_nums,
+                "limit": 8,
+                "hidden": [1, 1, 0],
+            }
+        )
+        self.num_guesses = self.num_guesses // 2
 
 
 class Entity:
@@ -518,28 +781,31 @@ class Entity:
         self.max_hp = data["hp"]
         self.hp = data["hp"]
         self.damage = data["damage"]
-        self.ko = False
+        self.best_damage = 0 # value 0-8
+        self.hits = 0
+        self.max_hits = 3 # only for player
+        self.is_ko = False
 
     def __str__(self) -> str:
         healthbar = "=" * round(10 * self.hp / self.max_hp)
-        return (
-            f"{self.name} {healthbar if healthbar != '' and not self.is_ko() else ':'}"
-        )
+        return f"{self.name} {healthbar if healthbar != '' and not self.is_ko else ':' if healthbar=='' and not self.is_ko else 'X'}"
 
-    def is_ko(self) -> bool:
-        if self.ko:
-            return True
-        else:
-            return False
+    def convert_evaluation_to_damage(self, evaluation: list):
+        damage = sum(evaluation)
+        if damage > self.best_damage:
+            self.best_damage = damage
 
-    def attack(self, target: object) -> None:
-        target._damage(self.damage)
+    def _damage(self, target: object, is_player=False) -> None:
+        target.hp = target.max_hp - round(target.max_hp * self.best_damage / 8)
 
-    def _damage(self, damage_value: int) -> None:
-        self.hp -= damage_value
-        if self.hp <= 0:
-            self.hp = 0
-            self.ko = True
+        target.hits += 1
+        if is_player and target.hits >= target.max_hits:
+            target.hp = 0
+            target.is_ko = True
+
+        if target.hp <= 0:
+            target.hp = 0
+            target.is_ko = True
 
 
 class PopUp:
