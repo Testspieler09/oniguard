@@ -161,11 +161,11 @@ FOOTER_TEXT = ["[H]elp", "[Q]uit"]
 NAME_REGEX = r"^[\S\s]+$"
 
 ONI_ENEMIES = {
-    "Level 1": {"name": "Void Oni", "hp": 750, "damage": 10},
-    "Level 2": {"name": "Frost Oni", "hp": 900, "damage": 25},
-    "Level 3": {"name": "Thunder Oni", "hp": 1100, "damage": 50},
-    "Level 4": {"name": "Venom Oni", "hp": 1250, "damage": 75},
-    "Level 5": {"name": "Blood Oni", "hp": 2000, "damage": 100},
+    "Level 1": {"name": "Void Oni", "hp": 750},
+    "Level 2": {"name": "Frost Oni", "hp": 900},
+    "Level 3": {"name": "Thunder Oni", "hp": 1100},
+    "Level 4": {"name": "Venom Oni", "hp": 1250},
+    "Level 5": {"name": "Blood Oni", "hp": 2000},
 }
 
 GAME_INTRO = """

@@ -52,7 +52,7 @@ logger = getLogger(__name__)
 class OniManager:
     def __init__(self, name: str) -> None:
         self.name = name
-        self.player = Entity({"name": name, "hp": 500, "damage": 50})
+        self.player = Entity({"name": name, "hp": 500})
         self.num_guesses = 0
         self.leaderboard = self.get_leaderboard()
 
@@ -367,6 +367,7 @@ class OniManager:
 
     def guess_pin(self, settings: dict) -> None:
         guess_num = 0
+        self.player.reset_best_damage()
         pin = self.gen_pin(settings["numbers twice"], settings["range"])
         enemy = Entity(settings["enemy"])
         settings_output = self.gen_settings_output(settings)
@@ -396,7 +397,6 @@ class OniManager:
         )
         total_guesses_win = newwin(1, len(message) + 3, 3, centered_message_x)
         total_guesses_win.addstr(message)
-
 
         total_guesses_win.refresh()
         player_win.refresh()
@@ -469,7 +469,7 @@ class OniManager:
 
                     self.player.convert_evaluation_to_damage(evaluation)
                     self.player._damage(enemy)
-                    enemy_win.move(0,0)
+                    enemy_win.move(0, 0)
                     enemy_win.clrtoeol()
                     enemy_win.addstr(0, 0, enemy.__str__())
                     enemy_win.refresh()
@@ -517,21 +517,15 @@ class OniManager:
 
                     self.player.convert_evaluation_to_damage(evaluation)
                     self.player._damage(enemy)
-                    enemy_win.move(0,0)
+                    enemy_win.move(0, 0)
                     enemy_win.clrtoeol()
                     enemy_win.addstr(0, 0, enemy.__str__())
                     enemy_win.refresh()
 
-                    if all(i == 2 for i in evaluation):
-                        self.num_guesses -= 2
-                        sleep(2)
-                        break
-
-                    guess_num += 1
-                    self.num_guesses += 1
-
                     self.update_game_pad(
-                        game_pad, guess_num, {"pin": input, "evaluation": evaluation}
+                        game_pad,
+                        guess_num + 1,
+                        {"pin": input, "evaluation": evaluation},
                     )
 
                     if self.dimensions[0] - 10 <= guess_num:
@@ -546,10 +540,20 @@ class OniManager:
                         centered_pad_x + width,
                     )
 
+                    if all(i == 2 for i in evaluation):
+                        self.num_guesses -= 2
+                        sleep(2)
+                        break
+
+                    guess_num += 1
+                    self.num_guesses += 1
+
                     total_guesses_win.addstr(0, 16, str(self.num_guesses))
                     total_guesses_win.refresh()
 
-                    enemy.convert_evaluation_to_damage([choice([0,1,2]) for _ in range(4)])
+                    enemy.convert_evaluation_to_damage(
+                        [choice([0, 1, 2]) for _ in range(4)]
+                    )
                     enemy._damage(self.player, is_player=True)
                     player_win.move(0, 0)
                     player_win.clrtoeol()
@@ -568,7 +572,7 @@ class OniManager:
                     self.kill_scr()
                     exit()
 
-        del win, enemy_win, player_win, total_guesses_win
+        del win, enemy_win, player_win, total_guesses_win, enemy
 
     def intro(self) -> None:
         intro = GAME_INTRO.replace("<Username>", self.name)
@@ -735,11 +739,11 @@ class OniManager:
                 "hidden": [1, 1, 0],
             }
         )
-        choice, _ = PopUp(self.screen).get_input_radio_btn(
+        choice_user, _ = PopUp(self.screen).get_input_radio_btn(
             ["-50% of guesses for winning another game", "end this torture"],
             "What would you like to do?",
         )
-        if choice == 1:
+        if choice_user == 1:
             self.kill_scr()
             exit()
 
@@ -772,23 +776,25 @@ class OniManager:
                 "hidden": [1, 1, 0],
             }
         )
-        self.num_guesses = self.num_guesses // 2
+        self.num_guesses = self.num_guesses - abs(self.num_guesses // 2)
 
 
 class Entity:
     def __init__(self, data: dict) -> None:
         self.name = data["name"]
-        self.max_hp = data["hp"]
+        self.MAX_HP = data["hp"]
         self.hp = data["hp"]
-        self.damage = data["damage"]
-        self.best_damage = 0 # value 0-8
+        self.best_damage = 0  # value 0-8
         self.hits = 0
-        self.max_hits = 3 # only for player
+        self.MAX_HITS = 3  # only for player
         self.is_ko = False
 
     def __str__(self) -> str:
-        healthbar = "=" * round(10 * self.hp / self.max_hp)
+        healthbar = "=" * round(10 * self.hp / self.MAX_HP)
         return f"{self.name} {healthbar if healthbar != '' and not self.is_ko else ':' if healthbar=='' and not self.is_ko else 'X'}"
+
+    def reset_best_damage(self) -> None:
+        self.best_damage = 0
 
     def convert_evaluation_to_damage(self, evaluation: list):
         damage = sum(evaluation)
@@ -796,14 +802,10 @@ class Entity:
             self.best_damage = damage
 
     def _damage(self, target: object, is_player=False) -> None:
-        target.hp = target.max_hp - round(target.max_hp * self.best_damage / 8)
+        target.hp = target.MAX_HP - round(target.MAX_HP * self.best_damage / 8)
 
         target.hits += 1
-        if is_player and target.hits >= target.max_hits:
-            target.hp = 0
-            target.is_ko = True
-
-        if target.hp <= 0:
+        if (is_player and target.hits >= target.MAX_HITS) or target.hp <= 0:
             target.hp = 0
             target.is_ko = True
 
@@ -1428,7 +1430,7 @@ class Renderer:
             case "Entry":
                 # get scheme_hash
                 schemes = self.data.get_schemes()
-                schemes.insert(0, "Cancel")
+                schemes = ["Cancel"] + schemes
                 popup = PopUp(self.screen)
                 idx, _ = popup.get_input_radio_btn(
                     [str(i) for i in schemes],
@@ -1548,6 +1550,7 @@ class Renderer:
         self.update_main_dimensions()
 
     def filter_procedure(self) -> None:
+        # causes problem with pointeridx
         choice, _ = PopUp(self.screen).get_input_radio_btn(
             ["Cancel", "Show hidden date statistics", "Filter schemes"],
             "What do you want to do?",
@@ -1571,7 +1574,7 @@ class Renderer:
                 idx, _ = PopUp(self.screen).get_input_checkboxes(
                     [str(i[1]) for i in schemes],
                     "Which schemes do you not want to display?",
-                    self.data.get_is_hidden_scheme_all_schemes(),  # maybe save in settings?!
+                    self.data.get_is_hidden_scheme_all_schemes(),
                 )
                 self.data.set_hidden_schemes(
                     [j[0] for i, j in enumerate(schemes) if i in idx]
@@ -1600,7 +1603,7 @@ class Renderer:
             return
         scheme_hash = self.data.get_scheme_hash_by_entry_hash(entry_hash)
         scheme_values = self.data.get_scheme(scheme_hash)
-        scheme_values.insert(0, ["Cancel", "None"])
+        scheme_values = [["Cancel", "None"]] + scheme_values
         scheme_values.extend(self.data.hidden_stats)
         idx, _ = PopUp(self.screen).get_input_radio_btn(
             [i[0] for i in scheme_values], "What column do you want to order by?"
@@ -1613,8 +1616,8 @@ class Renderer:
             "How should the data be displayed?",
         )
         if scheme_hash in (i[0] for i in self.data.order):
-            idx = [i[0] for i in self.data.order].index(scheme_hash)
-            self.data.order.pop(idx)
+            scheme_order_idx = [i[0] for i in self.data.order].index(scheme_hash)
+            self.data.order.pop(scheme_order_idx)
         self.data.order.append([scheme_hash, idx - 1, choice])
         self.update_contents()
         self.update_scr()
@@ -1633,7 +1636,7 @@ class Renderer:
         options = self.data.get_entry_values(entry_hash)
         if options == []:
             return
-        options.insert(0, "Cancel")
+        options = ["Cancel"] + options
         _, value = PopUp(self.screen).get_input_radio_btn(
             options, "Which value do you want to copy to your clipboard?"
         )

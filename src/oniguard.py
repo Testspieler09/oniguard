@@ -70,7 +70,7 @@ def main(args: object) -> None:
         leaderboard_path = join("..", "userdata", ".leaderboard")
         if not exists(leaderboard_path):
             with open(leaderboard_path, "w") as f:
-                f.write("[]")
+                f.write("[['Testspieler09', 35]]")
         OniManager(args.username)
         exit()
 

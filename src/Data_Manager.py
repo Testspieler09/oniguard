@@ -297,15 +297,21 @@ class DataManager(FileManager):
     def get_idx_of_entries(self) -> list[int]:
         if self.current_data == None:
             return []
+        entries = [
+            scheme
+            for scheme in self.current_data
+            if self.data["entries"][scheme[0][0]]["scheme_hash"]
+            not in self.data["settings"]["hidden_schemes"]
+        ]
         HEADER_SIZE, SPACE_BETWEEN_TABLES, SPACE_BETWEEN_ENTRIES = 4, 2, 1
         idx = []
         counter = -1
-        for i in range(len(self.current_data)):
+        for i in range(len(entries)):
             if counter != -1:
                 counter += SPACE_BETWEEN_TABLES
             counter += HEADER_SIZE
             idx.append(counter)
-            for j in range(len(self.current_data[i]) - 1):
+            for j in range(len(entries[i]) - 1):
                 counter += SPACE_BETWEEN_ENTRIES
                 idx.append(counter)
         return idx
@@ -313,13 +319,25 @@ class DataManager(FileManager):
     def get_entry_hash_by_pointer_idx(self, pointer_idx: list) -> str | None:
         try:
             idx = pointer_idx[1].index(pointer_idx[0])
-            joined_list = [i[0] for j in self.current_data for i in j]
+            joined_list = [
+                entry[0]
+                for scheme in self.current_data
+                for entry in scheme
+                if self.data["entries"][entry[0]]["scheme_hash"]
+                not in self.data["settings"]["hidden_schemes"]
+            ]
             return joined_list[idx]
         except:
             return
 
     def get_pointer_idx_by_hash(self, entry_hash: str) -> int | None:
-        joined_list = [i[0] for j in self.current_data for i in j]
+        joined_list = [
+            entry[0]
+            for scheme in self.current_data
+            for entry in scheme
+            if self.data["entries"][entry[0]]["scheme_hash"]
+            not in self.data["settings"]["hidden_schemes"]
+        ]
         try:
             idx = joined_list.index(entry_hash)
             return self.get_idx_of_entries()[idx]
