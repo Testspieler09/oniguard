@@ -1,5 +1,5 @@
 # OniGuard
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black) ![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
+![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54) [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 **Leave a ⭐ if you like this project**
 
@@ -7,19 +7,33 @@
 
 OniGuard is a terminal application written in python. It has a playfull oni theme and is a basic password manager.
 
+> [!Important]
+> Do not try to resize the program during execution as it leads to problems.
+>
+> This may be a problem with pythons curses wrapper.
+
 ## Sneakpeaks
 
-### Lockscreen
+<details><summary>Lockscreen</summary>
 
-\<Lockscreen image here>
+![Screenshot 2024-07-26 195112](https://github.com/user-attachments/assets/4710cb55-8a60-4d9d-a157-9ec6a120b5e6)
 
-### Main screen
+</details>
+<details><summary>Main screen</summary>
 
-\<Main screen image here>
+![Screenshot 2024-07-26 195524](https://github.com/user-attachments/assets/3d0fcc7c-d664-4679-990d-a78536993ab5)
 
-### Game
+</details>
+<details><summary>Map / Progress screen</summary>
 
-\<Game image here>
+![Screenshot 2024-08-01 211955](https://github.com/user-attachments/assets/0846f06d-07cf-4d95-9141-89fc1e71676e)
+
+</details>
+<details><summary>Game</summary>
+
+![Screenshot 2024-08-02 110936](https://github.com/user-attachments/assets/5377e2fd-4909-4df8-b1ac-23b7c95bdac1)
+
+</details>
 
 ## Features
 
@@ -112,6 +126,7 @@ pip install -r requirements_no_windows.txt
 
 ## Pyperclip on Linux
 
+> [!Note]
 > On Linux, you'll need the xclip or xsel command (installed via apt, etc.), and the gtk or PyQt4 modules (installed via pip).
 
 <sup>
