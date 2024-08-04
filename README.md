@@ -16,22 +16,22 @@ OniGuard is a terminal application written in python. It has a playfull oni them
 
 <details><summary>Lockscreen</summary>
 
-![Screenshot 2024-07-26 195112](https://github.com/user-attachments/assets/4710cb55-8a60-4d9d-a157-9ec6a120b5e6)
+![Lockscreen](assets/lockscreen.png)
 
 </details>
 <details><summary>Main screen</summary>
 
-![Screenshot 2024-07-26 195524](https://github.com/user-attachments/assets/3d0fcc7c-d664-4679-990d-a78536993ab5)
+![Program](assets/program.png)
 
 </details>
 <details><summary>Map / Progress screen</summary>
 
-![Screenshot 2024-08-01 211955](https://github.com/user-attachments/assets/0846f06d-07cf-4d95-9141-89fc1e71676e)
+![Map](assets/map.png)
 
 </details>
 <details><summary>Game</summary>
 
-![Screenshot 2024-08-02 110936](https://github.com/user-attachments/assets/5377e2fd-4909-4df8-b1ac-23b7c95bdac1)
+![Game](assets/game.png)
 
 </details>
 
