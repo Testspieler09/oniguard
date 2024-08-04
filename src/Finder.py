@@ -18,7 +18,3 @@ class Finder:
         best_matches = Finder.get_best_match_for_each_entry(data, query)
         best_matches.sort(key=lambda x: x[2], reverse=True)
         return best_matches[:top_n]
-
-
-if __name__ == "__main__":
-    find = Finder()

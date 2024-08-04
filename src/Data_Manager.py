@@ -515,10 +515,3 @@ def get_hashing_obj(salt: str) -> object:
 
 def convert_pw_to_key(kdf: object, pw: str) -> str:
     return urlsafe_b64encode(kdf.derive(pw.encode()))
-
-
-if __name__ == "__main__":
-    for _ in range(5):
-        pw = generate_password(20)
-        print(pw)
-        print(evaluate_password(pw))

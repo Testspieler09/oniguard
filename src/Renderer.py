@@ -1883,24 +1883,3 @@ class Renderer:
             self.windows[win].refresh(
                 self.scroll_y, self.scroll_x, start_x, start_y, end_x, end_y
             )
-
-
-if __name__ == "__main__":
-    from cryptography.hazmat.primitives import hashes
-    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-    from base64 import urlsafe_b64encode
-    from Data_Manager import DataManager
-
-    with open("..\\userdata\\test\\.salt", "rb") as f:
-        salt = f.readline()
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=salt,
-        iterations=480000,
-    )
-    key = urlsafe_b64encode(kdf.derive(b"g"))
-    dm = DataManager("..\\userdata\\test\\test.data", key)
-    renderer = Renderer(dm)
-    # game
-    player = OniManager("test")

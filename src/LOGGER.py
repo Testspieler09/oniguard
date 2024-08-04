@@ -12,12 +12,3 @@ def setup_logger(log_file: str) -> None:
     )
     logger.info("Started Logger")
     return logger
-
-
-if __name__ == "__main__":
-    logger = setup_logger("logfile.log")
-    logger.debug("hello")
-    logger.info("hello")
-    logger.warning("hello")
-    logger.error("hello")
-    logger.critical("hello")
