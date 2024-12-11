@@ -1,7 +1,7 @@
-from logging import getLogger, basicConfig, DEBUG
+from logging import DEBUG, Logger, basicConfig, getLogger
 
 
-def setup_logger(log_file: str) -> None:
+def setup_logger(log_file: str) -> Logger:
     logger = getLogger(__name__)
     basicConfig(
         filename=log_file,

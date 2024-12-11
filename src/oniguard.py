@@ -1,8 +1,9 @@
 # Security packets
+import argparse
 from getpass import getpass
 
 # Other packets
-from os import get_terminal_size, mkdir, urandom
+from os import get_terminal_size, makedirs, urandom
 from os.path import exists, join
 from time import sleep
 from shutil import rmtree
@@ -23,15 +24,15 @@ def ask_yes_no(message: str) -> bool:
     elif choice.lower() == "n":
         return False
     else:
-        logger.critical("The ask yes no function is broken.")
+        raise Exception("ask_yes_no has an implementation error")
 
 
-def login_procedure(folder_path_cross_platform: str) -> object | None:
+def login_procedure(folder_path_cross_platform: str) -> DataManager:
     if not exists(folder_path_cross_platform):
         choice = ask_yes_no(f"Do you want to create a new user {args.username}?")
         if choice:
-            mkdir(folder_path_cross_platform)
-            logger = setup_logger(join(folder_path_cross_platform, "oniguard.log"))
+            makedirs(folder_path_cross_platform)
+            setup_logger(join(folder_path_cross_platform, "oniguard.log"))
             salt = urandom(16)
             with open(join(folder_path_cross_platform, ".salt"), "wb") as f:
                 f.write(salt)
@@ -50,7 +51,8 @@ def login_procedure(folder_path_cross_platform: str) -> object | None:
                 )
         else:
             exit()
-    logger = setup_logger(join(folder_path_cross_platform, "oniguard.log"))
+    else:
+        setup_logger(join(folder_path_cross_platform, "oniguard.log"))
     with open(join(folder_path_cross_platform, ".salt"), "rb") as f:
         kdf = get_hashing_obj(f.readline())
     password = getpass(f"Please provide the master password for {args.username}: ")
@@ -59,13 +61,13 @@ def login_procedure(folder_path_cross_platform: str) -> object | None:
         return DataManager(
             join(folder_path_cross_platform, f"{args.username}.data"), key
         )
-    except:
+    except Exception:
         print("Password not correct")
         sleep(5)
         exit()
 
 
-def main(args: object) -> None:
+def main(args: argparse.Namespace) -> None:
     if args.game:
         leaderboard_path = join("..", "userdata", ".leaderboard")
         if not exists(leaderboard_path):
