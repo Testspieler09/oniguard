@@ -1804,15 +1804,9 @@ class Renderer:
     def update_contents(self) -> None:
         self.beautified_content = self.data.beautify_output(self.content)
         pointer_entry_hash = self.data.get_entry_hash_by_pointer_idx(self.pointer_idx)
-        if pointer_entry_hash is None:
-            return
         self.pointer_idx[1] = self.data.get_idx_of_entries()
         new_pointer_idx = self.data.get_pointer_idx_by_hash(pointer_entry_hash)
-        self.pointer_idx[0] = (
-            3
-            if pointer_entry_hash is None or new_pointer_idx is None
-            else new_pointer_idx
-        )
+        self.pointer_idx[0] = 3 if new_pointer_idx is None else new_pointer_idx
         self.scroll_y, self.scroll_x = (
             self.pointer_idx[0] - self.window_dimensions[0][0] + 6,
             0,

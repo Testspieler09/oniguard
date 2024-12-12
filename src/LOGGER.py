@@ -6,7 +6,7 @@ def setup_logger(log_file: str) -> Logger:
     basicConfig(
         filename=log_file,
         filemode="w",
-        format="[ %(asctime)s | %(levelname)s ] - %(module)s.py - %(message)s",
+        format="[ %(asctime)s | %(levelname)s ] - %(module)s.py - line %(lineno)d - %(message)s",
         datefmt="%H:%M:%S",
         level=DEBUG,
     )

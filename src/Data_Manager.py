@@ -82,6 +82,9 @@ class FileManager:
         with open(self.path_to_file, "r") as f:
             data = self.crypt.decrypt(f.readline())
             if data is not None:
+                # TODO: Fix loads error here leading to #1 issue
+                # Expecting ',' delimiter:
+                logger.debug(data.replace("'", '"'))
                 return loads(data.replace("'", '"'))
 
         logger.critical("Wrong password provided or something else went wrong.")
@@ -153,7 +156,8 @@ class DataManager(FileManager):
             key = convert_pw_to_key(kdf, pw)
             DataManager(self.path_to_file, key)
             return True
-        except Exception:
+        except Exception as e:
+            logger.critical(e)
             return False
 
     @staticmethod
@@ -203,6 +207,7 @@ class DataManager(FileManager):
             return []
         return self.data["entries"][hash]["values"]
 
+    # TODO: decode the data before outputting
     def get_values_beautified(self, hash: str) -> list | None:
         if hash not in self.data["entries"].keys():
             return []
@@ -334,7 +339,7 @@ class DataManager(FileManager):
                 idx.append(counter)
         return idx
 
-    def get_entry_hash_by_pointer_idx(self, pointer_idx: list) -> str | None:
+    def get_entry_hash_by_pointer_idx(self, pointer_idx: list) -> str:
         try:
             idx = pointer_idx[1].index(pointer_idx[0])
             joined_list = [
@@ -345,8 +350,8 @@ class DataManager(FileManager):
                 not in self.data["settings"]["hidden_schemes"]
             ]
             return joined_list[idx]
-        except Exception:
-            return
+        except ValueError:
+            return self.current_data[0][0][0]
 
     def get_pointer_idx_by_hash(self, entry_hash: str) -> int | None:
         joined_list = [
@@ -359,7 +364,8 @@ class DataManager(FileManager):
         try:
             idx = joined_list.index(entry_hash)
             return self.get_idx_of_entries()[idx]
-        except ValueError:
+        except ValueError as e:
+            logger.critical(e)
             return
 
     # Setter
@@ -370,6 +376,7 @@ class DataManager(FileManager):
         self.data["settings"]["hidden_schemes"] = hidden_schemes
 
     # Add data
+    # TODO: use base64 encoding to fix the loads problem
     def add_entry(self, scheme_hash: str, entry: list) -> None:
         data = {}
         now = str(datetime.now())
@@ -520,7 +527,7 @@ def evaluate_password(password: str) -> str:
     elif variaty == 4:
         return "EXCELLENT"
     else:
-        return ""
+        return "HACKED"
 
 
 def get_hashing_obj(salt: bytes) -> PBKDF2HMAC:
