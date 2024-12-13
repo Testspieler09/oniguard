@@ -1,25 +1,26 @@
 # Security packets
+# Other packets
+from base64 import urlsafe_b64encode, b64encode, b64decode
+from datetime import datetime
+from json import loads
+from logging import getLogger
+from os.path import exists, join, split, splitext
 from secrets import choice
+from string import ascii_letters, digits, punctuation
+from uuid import uuid4
+
+from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.fernet import Fernet
-
-# Other packets
-from base64 import urlsafe_b64encode
-from uuid import uuid4
-from datetime import datetime
-from string import ascii_letters, digits, punctuation
-from os.path import exists, join, splitext, split
-from json import loads
 from prettytable import PrettyTable
+
 from assets import DEFAULT_SCHEMES
-from logging import getLogger
 
 logger = getLogger(__name__)
 
 
 class Cryptographer:
-    def __init__(self, key: str) -> None:
+    def __init__(self, key: bytes) -> None:
         try:
             self.fernet = Fernet(key)
         except Exception as e:
@@ -29,17 +30,17 @@ class Cryptographer:
             logger.critical(e)
 
     @staticmethod
-    def gen_key() -> str:
+    def gen_key() -> bytes:
         key = Fernet.generate_key()
         return key
 
-    def encrypt(self, data: any) -> str:
+    def encrypt(self, data: str) -> bytes | None:
         try:
             return self.fernet.encrypt(data.encode())
         except Exception as e:
             logger.critical(e)
 
-    def decrypt(self, data: any) -> str:
+    def decrypt(self, data: str) -> str | None:
         try:
             return self.fernet.decrypt(data).decode()
         except Exception as e:
@@ -51,7 +52,7 @@ class FileManager:
     A class that manages a JSON file and the respective backup file
     """
 
-    def __init__(self, path_to_file: str, key: str) -> None:
+    def __init__(self, path_to_file: str, key: bytes) -> None:
         if not exists(path_to_file):
             logger.critical("File not found in given directory.")
             logger.info(f"Therefore a file was created at {path_to_file}")
@@ -62,14 +63,16 @@ class FileManager:
         self.backup_path: str = splitext(path_to_file)[0] + ".backup"
         self.data: dict = self.read_file_data()
 
-    def for_new_file(self, path_with_filename_and_extension: str, key: str) -> None:
+    def for_new_file(self, path_with_filename_and_extension: str, key: bytes) -> None:
         """
         Alternative constructor for when the JSON file doesn't exist yet
         """
         crypt = Cryptographer(key)
         default_content = f'{{"settings":{{"dates_hidden":[true, true], "hidden_schemes": []}},"schemes": {DEFAULT_SCHEMES}, "entries": {{}}}}'
         with open(path_with_filename_and_extension, "wb") as f:
-            f.write(crypt.encrypt(default_content))
+            if (content := crypt.encrypt(default_content)) is None:
+                return
+            f.write(content)
         return
 
     def read_file_data(self) -> dict:
@@ -78,7 +81,8 @@ class FileManager:
         """
         with open(self.path_to_file, "r") as f:
             data = self.crypt.decrypt(f.readline())
-            if data != None:
+            if data is not None:
+                logger.debug(data.replace("'", '"'))
                 return loads(data.replace("'", '"'))
 
         logger.critical("Wrong password provided or something else went wrong.")
@@ -89,22 +93,35 @@ class FileManager:
         Overwrite old data with new data
         """
         with open(self.path_to_file, "wb") as f:
-            f.write(self.crypt.encrypt(str(self.data).replace("True", "true")))
+            if (
+                content := self.crypt.encrypt(str(self.data).replace("True", "true"))
+            ) is None:
+                return
+            f.write(content)
 
     def write_backup(self) -> None:
         with open(self.backup_path, "wb") as f:
-            f.write(self.crypt.encrypt(str(self.data).replace("True", "true")))
+            if (
+                content := self.crypt.encrypt(str(self.data).replace("True", "true"))
+            ) is None:
+                return
+            f.write(content)
 
     def load_backup_data(self) -> None:
         """
         Load backup data as the dict
         """
-        with open(self.crypt.decrypt(self.backup_path), "rb") as f:
-            self.data = load(f)
+        with open(self.backup_path, "r") as f:
+            data = self.crypt.decrypt(f.readline())
+            if data is not None:
+                return loads(data.replace("'", '"'))
+
+        logger.critical("Wrong password provided or something else went wrong.")
+        raise Exception("Wrong Password")
 
     def overwrite_main_data_with_backup(self) -> None:
-        with open(self.crypt.decrypt(self.backup_path), "rb") as f:
-            update_data(load(f))
+        self.load_backup_data()
+        self.update_data()
 
 
 class DataManager(FileManager):
@@ -123,10 +140,10 @@ class DataManager(FileManager):
     }
     """
 
-    def __init__(self, path_to_file: str, key: str) -> None:
+    def __init__(self, path_to_file: str, key: bytes) -> None:
         super().__init__(path_to_file, key)
         self.hidden_stats = [["Changedate", "Hidden"], ["Creationdate", "Hidden"]]
-        self.current_data = None
+        self.current_data: list = []
         self.order = []
 
     def is_master_password(self, pw: str) -> bool:
@@ -137,14 +154,15 @@ class DataManager(FileManager):
             key = convert_pw_to_key(kdf, pw)
             DataManager(self.path_to_file, key)
             return True
-        except:
+        except Exception as e:
+            logger.critical(e)
             return False
 
     @staticmethod
     def gen_hash() -> str:
         return uuid4().hex
 
-    def group_data_by_schemes(self, data: dict) -> dict:
+    def group_data_by_schemes(self, data: dict) -> tuple[list, list]:
         """
         For display purposes
         """
@@ -152,19 +170,21 @@ class DataManager(FileManager):
             sorted(data.items(), key=lambda item: item[1]["scheme_hash"])
         )
         first_time = True
-        scheme_hashes, data = [], []
+        scheme_hashes, grouped_data = [], []
         for hash, values in sorted_data.items():
             if first_time or values["scheme_hash"] != scheme_hashes[-1]:
                 first_time = False
                 scheme_hashes.append(values["scheme_hash"])
-                data.append([[hash, values["values"]]])
+                grouped_data.append([[hash, values["values"]]])
             else:
-                data[-1].append([hash, values["values"]])
+                grouped_data[-1].append([hash, values["values"]])
         # Order logic here
         for operation in self.order:
             idx = scheme_hashes.index(operation[0])
-            data[idx].sort(key=lambda x: x[1][operation[1]], reverse=operation[2])
-        return scheme_hashes, data
+            grouped_data[idx].sort(
+                key=lambda x: x[1][operation[1]], reverse=operation[2]
+            )
+        return scheme_hashes, grouped_data
 
     # Getter methods
     def get_all_entries(self) -> dict:
@@ -180,21 +200,28 @@ class DataManager(FileManager):
                 entries.update({key: entry})
         return entries
 
-    def get_entry_values(self, hash: str) -> list:
-        if not hash in self.data["entries"].keys():
+    def get_entry_values(self, hash: str) -> list[str]:
+        if hash not in self.data["entries"].keys():
             return []
-        return self.data["entries"][hash]["values"]
+        return [
+            b64decode(i.encode()).decode() for i in self.data["entries"][hash]["values"]
+        ]
 
-    def get_values_beautified(self, hash: str) -> list:
-        if not hash in self.data["entries"].keys():
+    def get_values_beautified(self, hash: str) -> list[str] | None:
+        if hash not in self.data["entries"].keys():
             return []
         scheme_hash = self.data["entries"][hash]["scheme_hash"]
-        if not scheme_hash in self.data["schemes"].keys():
+        if scheme_hash not in self.data["schemes"].keys():
             return
 
         table = PrettyTable()
         table.field_names = (i[0] for i in self.data["schemes"][scheme_hash])
-        table.add_row(self.data["entries"][hash]["values"])
+        table.add_row(
+            [
+                b64decode(i.encode()).decode()
+                for i in self.data["entries"][hash]["values"]
+            ]
+        )
 
         return table.__str__().splitlines()
 
@@ -227,7 +254,7 @@ class DataManager(FileManager):
             else ["You have no entries to display yet. Add one with [A]."]
         )
 
-    def get_entries_anonymised_with_hash(self, hashes: list) -> list:
+    def get_entries_anonymised_with_hash(self, hashes: list) -> list[str]:
         entries = [i for i in self.data["entries"].items() if i[0] in hashes]
         options = []
         for entry in entries:
@@ -239,7 +266,10 @@ class DataManager(FileManager):
                         for i in self.apply_constraints_to_data(
                             list(
                                 zip(
-                                    entry[1]["values"],
+                                    [
+                                        b64decode(i.encode()).decode()
+                                        for i in entry[1]["values"]
+                                    ],
                                     (
                                         i[1]
                                         for i in self.data["schemes"][
@@ -254,14 +284,14 @@ class DataManager(FileManager):
             )
         return options
 
-    def get_scheme_hash_by_scheme(self, p_scheme: list) -> str:
+    def get_scheme_hash_by_scheme(self, p_scheme: list) -> str | None:
         for hash, scheme in self.data["schemes"].items():
             if scheme[:-2] == p_scheme:
                 return hash
         logger.critical("Couldn't find a the provided scheme")
 
-    def get_scheme_hash_by_entry_hash(self, entry_hash: str) -> str:
-        if not entry_hash in self.data["entries"].keys():
+    def get_scheme_hash_by_entry_hash(self, entry_hash: str) -> str | None:
+        if entry_hash not in self.data["entries"].keys():
             return
         return self.data["entries"][entry_hash]["scheme_hash"]
 
@@ -277,13 +307,13 @@ class DataManager(FileManager):
             for i in self.data["schemes"].keys()
         ]
 
-    def get_scheme(self, hash: str) -> list:
-        if not hash in self.data["schemes"].keys():
+    def get_scheme(self, hash: str) -> list | None:
+        if hash not in self.data["schemes"].keys():
             return
         return self.data["schemes"][hash][:-2]
 
-    def get_scheme_head(self, scheme_hash: str) -> str:
-        if not scheme_hash in self.data["schemes"].keys():
+    def get_scheme_head(self, scheme_hash: str) -> str | None:
+        if scheme_hash not in self.data["schemes"].keys():
             return
         table = PrettyTable()
         table.field_names = [i[0] for i in self.data["schemes"][scheme_hash]]
@@ -295,7 +325,7 @@ class DataManager(FileManager):
         return y, x
 
     def get_idx_of_entries(self) -> list[int]:
-        if self.current_data == None:
+        if self.current_data is None:
             return []
         entries = [
             scheme
@@ -311,12 +341,12 @@ class DataManager(FileManager):
                 counter += SPACE_BETWEEN_TABLES
             counter += HEADER_SIZE
             idx.append(counter)
-            for j in range(len(entries[i]) - 1):
+            for _ in range(len(entries[i]) - 1):
                 counter += SPACE_BETWEEN_ENTRIES
                 idx.append(counter)
         return idx
 
-    def get_entry_hash_by_pointer_idx(self, pointer_idx: list) -> str | None:
+    def get_entry_hash_by_pointer_idx(self, pointer_idx: list) -> str:
         try:
             idx = pointer_idx[1].index(pointer_idx[0])
             joined_list = [
@@ -327,8 +357,8 @@ class DataManager(FileManager):
                 not in self.data["settings"]["hidden_schemes"]
             ]
             return joined_list[idx]
-        except:
-            return
+        except ValueError:
+            return self.current_data[0][0][0]
 
     def get_pointer_idx_by_hash(self, entry_hash: str) -> int | None:
         joined_list = [
@@ -341,7 +371,8 @@ class DataManager(FileManager):
         try:
             idx = joined_list.index(entry_hash)
             return self.get_idx_of_entries()[idx]
-        except ValueError:
+        except ValueError as e:
+            logger.critical(e)
             return
 
     # Setter
@@ -352,12 +383,12 @@ class DataManager(FileManager):
         self.data["settings"]["hidden_schemes"] = hidden_schemes
 
     # Add data
-    def add_entry(self, scheme_hash: str, entry: list) -> None:
+    def add_entry(self, scheme_hash: str, entry: list[str]) -> None:
         data = {}
         now = str(datetime.now())
         entry.extend([now, now])
         data["scheme_hash"] = scheme_hash
-        data["values"] = entry
+        data["values"] = [b64encode(i.encode()).decode() for i in entry]
         self.data["entries"].update({self.gen_hash(): data})
 
     def add_scheme(self, scheme: list) -> None:
@@ -365,23 +396,25 @@ class DataManager(FileManager):
         self.data["schemes"].update({self.gen_hash(): scheme})
 
     # Update methods
-    def update_entry(self, entry_hash: str, new_data: list) -> None:
-        if not entry_hash in self.data["entries"].keys():
+    def update_entry(self, entry_hash: str, new_data: list[str]) -> None:
+        if entry_hash not in self.data["entries"].keys():
             return
         new_data.extend(
             [str(datetime.now()), self.data["entries"][entry_hash]["values"][-1]]
         )
-        self.data["entries"][entry_hash]["values"] = new_data
+        self.data["entries"][entry_hash]["values"] = [
+            b64encode(i.encode()) for i in new_data
+        ]
 
     def update_scheme(self, scheme_hash: str, new_data: list) -> None:
-        if not scheme_hash in self.data["schemes"].keys():
+        if scheme_hash not in self.data["schemes"].keys():
             return
         new_data.extend(self.hidden_stats)
         self.data["schemes"][scheme_hash] = new_data
 
     # Delete methods
     def delete_entry(self, entry_hash: str) -> None:
-        if not entry_hash in self.data["entries"].keys():
+        if entry_hash not in self.data["entries"].keys():
             return
         del self.data["entries"][entry_hash]
 
@@ -390,7 +423,7 @@ class DataManager(FileManager):
         for hash in entries_with_scheme.keys():
             self.delete_entry(hash)
 
-        if not scheme_hash in self.data["schemes"].keys():
+        if scheme_hash not in self.data["schemes"].keys():
             return
         del self.data["schemes"][scheme_hash]
 
@@ -430,7 +463,7 @@ class DataManager(FileManager):
                     )
                     data[num] = (
                         "".join(
-                            value if not i in idx else "*"
+                            value if i not in idx else "*"
                             for i, value in enumerate(zip_item_constraint[0])
                         ),
                         zip_item_constraint[1],
@@ -441,7 +474,7 @@ class DataManager(FileManager):
             data.pop(i)
         return data
 
-    def beautify_output(self, data: dict) -> list[str]:
+    def beautify_output(self, data: dict) -> str:
         """
         if multiple schemes display them below each other
         """
@@ -474,7 +507,7 @@ class DataManager(FileManager):
 # SOME FUNCTIONS REGARDING PASSWORD STUFF
 def generate_password(length: int) -> str:
     alphabet = ascii_letters + digits + punctuation
-    password = "".join(choice(alphabet) for i in range(length))
+    password = "".join(choice(alphabet) for _ in range(length))
     return password
 
 
@@ -501,9 +534,11 @@ def evaluate_password(password: str) -> str:
         return "OKAY"
     elif variaty == 4:
         return "EXCELLENT"
+    else:
+        return "HACKED"
 
 
-def get_hashing_obj(salt: str) -> object:
+def get_hashing_obj(salt: bytes) -> PBKDF2HMAC:
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
@@ -513,5 +548,5 @@ def get_hashing_obj(salt: str) -> object:
     return kdf
 
 
-def convert_pw_to_key(kdf: object, pw: str) -> str:
+def convert_pw_to_key(kdf: PBKDF2HMAC, pw: str) -> bytes:
     return urlsafe_b64encode(kdf.derive(pw.encode()))

@@ -1,56 +1,58 @@
+from ast import literal_eval
+from collections import Counter
 from curses import (
-    newwin,
-    newpad,
-    initscr,
-    init_pair,
-    color_pair,
-    start_color,
-    curs_set,
-    cbreak,
-    noecho,
-    nocbreak,
-    echo,
-    endwin,
+    A_NORMAL,
+    A_UNDERLINE,
     COLOR_BLACK,
     COLOR_BLUE,
     COLOR_GREEN,
     COLOR_RED,
-    A_UNDERLINE,
-    A_NORMAL,
+    cbreak,
+    color_pair,
+    curs_set,
+    echo,
+    endwin,
+    init_pair,
+    initscr,
+    newpad,
+    newwin,
+    nocbreak,
+    noecho,
+    start_color,
+    use_default_colors,
+    window,
 )
-from pyperclip import copy
-from prettytable import PrettyTable
+from logging import getLogger
+from os.path import join
+from random import choice, choices, sample
 from re import match
-from random import choices, choice, sample
-from collections import Counter
-from ast import literal_eval
 from textwrap import wrap
-from os.path import split, join
-from Finder import Finder
+from time import sleep
+
+from prettytable import PrettyTable
+from pyperclip import copy
+
+from assets import (
+    ASCII_ONI_LOGO,
+    CONSTRAINTS,
+    FOOTER_TEXT,
+    GAME_INTRO,
+    HELP_MESSAGE,
+    NAME_REGEX,
+    ONI_ENEMIES,
+)
 from Data_Manager import (
     DataManager,
-    generate_password,
     evaluate_password,
-    get_hashing_obj,
-    convert_pw_to_key,
+    generate_password,
 )
-from assets import (
-    HELP_MESSAGE,
-    FOOTER_TEXT,
-    CONSTRAINTS,
-    NAME_REGEX,
-    ASCII_ONI_LOGO,
-    ONI_ENEMIES,
-    GAME_INTRO,
-)
-from time import sleep
-from logging import getLogger
+from Finder import Finder
 
 logger = getLogger(__name__)
 
 
 class OniManager:
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, use_transparency: bool) -> None:
         self.name = name
         self.player = Entity({"name": name, "hp": 500})
         self.num_guesses = 0
@@ -67,7 +69,11 @@ class OniManager:
 
         # COLOR STUFF FOR IMPORTANCE
         start_color()
-        init_pair(2, COLOR_BLUE, COLOR_BLACK)
+        if use_transparency:
+            use_default_colors()
+            init_pair(2, COLOR_BLUE, -1)
+        else:
+            init_pair(2, COLOR_BLUE, COLOR_BLACK)
 
         # CLEAR SCREEN AND RUN IT
         self.screen.clear()
@@ -81,7 +87,7 @@ class OniManager:
         endwin()
 
     @staticmethod
-    def get_leaderboard() -> None:
+    def get_leaderboard() -> list:
         with open(join("..", "userdata", ".leaderboard"), "r") as f:
             return literal_eval(f.readline())
 
@@ -115,7 +121,7 @@ class OniManager:
                     ],
                 ),
             )
-        except:
+        except Exception:
             logger.critical("Couldn't display footer")
         _, x = Renderer.get_coordinates_for_centered_text(self.screen, headline)
         self.screen.addstr(1, x, headline, A_UNDERLINE)
@@ -145,8 +151,9 @@ class OniManager:
         headline_y, headline_x = Renderer.get_coordinates_for_centered_text(
             self.screen, headline
         )
-        headline_y, headline_x = headline_y - 2 if headline_y - 2 > 0 else 1, (
-            headline_x if headline_x > 0 else 1
+        headline_y, headline_x = (
+            headline_y - 2 if headline_y - 2 > 0 else 1,
+            (headline_x if headline_x > 0 else 1),
         )
         map_y, map_x = Renderer.get_coordinates_for_centered_text(
             self.screen, map_progress
@@ -233,13 +240,16 @@ class OniManager:
         dimensions = pad.getmaxyx()
         pad.box()
         y, x = (
-            2
-            if height >= self.dimensions[0] - 3
-            else self.dimensions[0] // 2 - height // 2
-        ), (
-            1
-            if width >= self.dimensions[1] - 1
-            else self.dimensions[1] // 2 - width // 2 + 1
+            (
+                2
+                if height >= self.dimensions[0] - 3
+                else self.dimensions[0] // 2 - height // 2
+            ),
+            (
+                1
+                if width >= self.dimensions[1] - 1
+                else self.dimensions[1] // 2 - width // 2 + 1
+            ),
         )
         for i, line in enumerate(output.splitlines()):
             pad.addstr(y + i - 1, x, line)
@@ -314,7 +324,7 @@ class OniManager:
             output += "???\n"
         # Limit
         output += "Max. guesses: "
-        output += str(settings["limit"]) if settings["limit"] != None else "∞"
+        output += str(settings["limit"]) if settings["limit"] is not None else "∞"
 
         return output
 
@@ -361,7 +371,7 @@ class OniManager:
         return pin
 
     @staticmethod
-    def update_game_pad(pad: object, guess_num: int, data: dict) -> None:
+    def update_game_pad(pad: window, guess_num: int, data: dict) -> None:
         message = f" {data['pin'][0]} | {data['pin'][1]} | {data['pin'][2]} | {data['pin'][3]} [{'|'.join(' X ' if i==2 else ' O ' if i == 1 else '   ' for i in data['evaluation'])}]"
         pad.addstr(guess_num, 1, message)
 
@@ -402,12 +412,16 @@ class OniManager:
         player_win.refresh()
         enemy_win.refresh()
 
-        height, width = settings["limit"] + 2 if settings["limit"] != None else 100, 34
+        height, width = (
+            settings["limit"] + 2 if settings["limit"] is not None else 100,
+            34,
+        )
         game_pad = newpad(height, width)
         game_pad.box()
         centered_pad_y, centered_pad_x = (
-            self.dimensions[0] - 3
-        ) // 2 - height // 2 + 2, (self.dimensions[1]) // 2 - width // 2
+            (self.dimensions[0] - 3) // 2 - height // 2 + 2,
+            (self.dimensions[1]) // 2 - width // 2,
+        )
         # Print game
         for line in range(height - 2):
             game_pad.addstr(line + 1, 1, "   |   |   |   [   |   |   |   ]")
@@ -495,8 +509,10 @@ class OniManager:
                         break
 
                     reached_max_guesses = (
-                        settings["limit"] == None and guess_num == height - 2
-                    ) or (settings["limit"] != None and guess_num == settings["limit"])
+                        settings["limit"] is None and guess_num == height - 2
+                    ) or (
+                        settings["limit"] is not None and guess_num == settings["limit"]
+                    )
                     if reached_max_guesses:
                         sleep(2)
                         self.game_over(died_early=True)
@@ -561,8 +577,10 @@ class OniManager:
                     player_win.refresh()
 
                     reached_max_guesses = (
-                        settings["limit"] == None and guess_num == height
-                    ) or (settings["limit"] != None and guess_num == settings["limit"])
+                        settings["limit"] is None and guess_num == height
+                    ) or (
+                        settings["limit"] is not None and guess_num == settings["limit"]
+                    )
 
                     if reached_max_guesses or self.player.is_ko:
                         sleep(2)
@@ -801,7 +819,7 @@ class Entity:
         if damage > self.best_damage:
             self.best_damage = damage
 
-    def _damage(self, target: object, is_player=False) -> None:
+    def _damage(self, target: "Entity", is_player=False) -> None:
         target.hp = target.MAX_HP - round(target.MAX_HP * self.best_damage / 8)
 
         target.hits += 1
@@ -811,7 +829,7 @@ class Entity:
 
 
 class PopUp:
-    def __init__(self, screen: object) -> None:
+    def __init__(self, screen: window) -> None:
         y, x = screen.getmaxyx()
         self.dimensions = (y - 3, x)
         self.win = newwin(y - 3, x, 2, 0)
@@ -831,7 +849,9 @@ class PopUp:
         del self
 
     # Read input
-    def get_input_checkboxes(self, options: list, message: str, cache=None) -> list:
+    def get_input_checkboxes(
+        self, options: list, message: str, cache=None
+    ) -> tuple[list[int], list]:
         message = self.make_message_fit_width(message, self.dimensions[1] - 2)
         height_of_msg = len(message.splitlines()) + 1
         self.win.addstr(1, 0, message)
@@ -843,7 +863,7 @@ class PopUp:
 
         selected = (
             [False] * len(options)
-            if cache == None or len(cache) != len(options)
+            if cache is None or len(cache) != len(options)
             else cache
         )
         current_option = 0
@@ -968,7 +988,7 @@ class PopUp:
         self, p_message: str, p_regex=None, anonymize_input=False
     ) -> str:
         WRONG_INPUT_MESSAGE = "The provided input doesn't match the wanted pattern.\n\n"
-        regex = r"[\S\s]*" if p_regex == None else p_regex
+        regex = r"[\S\s]*" if p_regex is None else p_regex
         message = self.make_message_fit_width(p_message, self.dimensions[1] - 2)
         height_of_msg = len(message.splitlines()) + 1
         message_is_updated = False
@@ -1014,8 +1034,13 @@ class PopUp:
 
 
 class Renderer:
+    # TODO: make it possible to use transparent background
     def __init__(
-        self, data_mng: object, beautified_content=None, pointer_idx=None
+        self,
+        data_mng: DataManager,
+        use_transparency: bool,
+        beautified_content=None,
+        pointer_idx=None,
     ) -> None:
         self.screen = initscr()
         self.data = data_mng
@@ -1039,7 +1064,7 @@ class Renderer:
         ]
 
         self.pointer_idx = (
-            [3, self.data.get_idx_of_entries()] if pointer_idx == None else pointer_idx
+            [3, self.data.get_idx_of_entries()] if pointer_idx is None else pointer_idx
         )
         self.scroll_y, self.scroll_x = (
             self.pointer_idx[0] - self.window_dimensions[0][0] + 6,
@@ -1057,15 +1082,21 @@ class Renderer:
         self.content = self.data.get_all_entries()
         self.beautified_content = (
             self.data.beautify_output(self.data.get_all_entries())
-            if beautified_content == None
+            if beautified_content is None
             else beautified_content
         )
 
         # COLOR STUFF FOR IMPORTANCE
         start_color()
-        init_pair(1, COLOR_GREEN, COLOR_BLACK)
-        init_pair(2, COLOR_BLUE, COLOR_BLACK)
-        init_pair(3, COLOR_RED, COLOR_BLACK)
+        if use_transparency:
+            use_default_colors()
+            init_pair(1, COLOR_GREEN, -1)
+            init_pair(2, COLOR_BLUE, -1)
+            init_pair(3, COLOR_RED, -1)
+        else:
+            init_pair(1, COLOR_GREEN, COLOR_BLACK)
+            init_pair(2, COLOR_BLUE, COLOR_BLACK)
+            init_pair(3, COLOR_RED, COLOR_BLACK)
         self.low_importance = color_pair(1)
         self.medium_importance = color_pair(2)
         self.high_importance = color_pair(3)
@@ -1112,16 +1143,17 @@ class Renderer:
             self.scroll_y, self.scroll_x, start_y, start_x, end_y, end_x
         )
 
-    def event_handler(self, event: str) -> None:
+    def event_handler(self, event: str | None) -> None:
         match event:
             # Scroll operations
             case "KEY_DOWN":
                 try:
                     if self.active_window == 2:
                         raise ValueError
-                    length_idx, current_idx = len(
-                        self.pointer_idx[1]
-                    ) - 1, self.pointer_idx[1].index(self.pointer_idx[0])
+                    length_idx, current_idx = (
+                        len(self.pointer_idx[1]) - 1,
+                        self.pointer_idx[1].index(self.pointer_idx[0]),
+                    )
                     if current_idx + 1 > length_idx:
                         raise ValueError
                     self.pointer_idx[0] = self.pointer_idx[1][current_idx + 1]
@@ -1162,9 +1194,10 @@ class Renderer:
                 try:
                     if self.active_window == 2:
                         raise ValueError
-                    length_idx, current_idx = len(
-                        self.pointer_idx[1]
-                    ) - 1, self.pointer_idx[1].index(self.pointer_idx[0])
+                    length_idx, current_idx = (
+                        len(self.pointer_idx[1]) - 1,
+                        self.pointer_idx[1].index(self.pointer_idx[0]),
+                    )
                     if current_idx - 1 < 0:
                         raise ValueError
                     self.pointer_idx[0] = self.pointer_idx[1][current_idx - 1]
@@ -1254,9 +1287,7 @@ class Renderer:
                 self.kill_scr()
             case "KEY_RESIZE":
                 self.kill_scr()
-                Renderer(
-                    self.data, self.content, self.beautified_content, self.pointer_idx
-                )
+                Renderer(self.data, self.beautified_content, self.pointer_idx)
 
     def quick_display(self, content: list) -> None:
         dimensions = len(content), max(len(i) for i in content)
@@ -1273,13 +1304,16 @@ class Renderer:
             ),
         )
         y, x = (
-            1
-            if dimensions[0] >= self.main_end_y_x[0] - 1
-            else self.main_end_y_x[0] // 2 - dimensions[0] // 2
-        ), (
-            0
-            if dimensions[1] >= self.main_end_y_x[1] - 1
-            else self.main_end_y_x[1] // 2 - dimensions[1] // 2 - 1
+            (
+                1
+                if dimensions[0] >= self.main_end_y_x[0] - 1
+                else self.main_end_y_x[0] // 2 - dimensions[0] // 2
+            ),
+            (
+                0
+                if dimensions[1] >= self.main_end_y_x[1] - 1
+                else self.main_end_y_x[1] // 2 - dimensions[1] // 2 - 1
+            ),
         )
         win.addstr(y - 1, x, "Press `ENTER` when you are finished.")
         for i, line in enumerate(content):
@@ -1355,7 +1389,6 @@ class Renderer:
                     self.kill_scr()
                     Renderer(
                         self.data,
-                        self.content,
                         self.beautified_content,
                         self.pointer_idx,
                     )
@@ -1411,7 +1444,7 @@ class Renderer:
                             _, constraint = PopUp(self.screen).get_input_radio_btn(
                                 CONSTRAINTS, "What constraint would you like to add."
                             )
-                            if not [name, constraint] in data:
+                            if [name, constraint] not in data:
                                 data.append([name, constraint])
                         case "Remove column":
                             if data == []:
@@ -1472,7 +1505,8 @@ class Renderer:
                                 if idx == 0:
                                     break
                     entry.append(input)
-                self.data.add_entry(scheme_hash, entry)
+                if scheme_hash is not None:
+                    self.data.add_entry(scheme_hash, entry)
         self.update_contents()
         self.update_main_dimensions()
         self.update_scr(hard_clear=True)
@@ -1480,9 +1514,13 @@ class Renderer:
     def change_procedure(self, hash: str, type_of_data_to_change: str) -> None:
         match type_of_data_to_change:
             case "entry":
-                scheme_values = self.data.get_scheme(
-                    self.data.get_scheme_hash_by_entry_hash(hash)
-                )
+                if (
+                    scheme_hash := self.data.get_scheme_hash_by_entry_hash(hash)
+                ) is None:
+                    return
+                scheme_values = self.data.get_scheme(scheme_hash)
+                if scheme_values is None:
+                    return
                 choice = PopUp(self.screen).get_input_checkboxes(
                     [
                         i.strip()
@@ -1504,6 +1542,8 @@ class Renderer:
                 self.data.update_entry(hash, entry[:-2])
             case "scheme":
                 scheme_values = self.data.get_scheme(hash)
+                if scheme_values is None:
+                    return
                 choice = PopUp(self.screen).get_input_checkboxes(
                     [i[0] for i in scheme_values], "What columns do you want to rename?"
                 )
@@ -1582,9 +1622,9 @@ class Renderer:
         self.update_contents()
         self.update_scr(hard_clear=True)
 
-    def show_procedure(self, hash: str) -> None:
+    def show_procedure(self) -> None:
         entry_hash = self.data.get_entry_hash_by_pointer_idx(self.pointer_idx)
-        if entry_hash == None:
+        if entry_hash is None:
             return
         password = PopUp(self.screen).get_input_string(
             "Please provide the masterpassword as the data will be displayed without anonymization.",
@@ -1594,15 +1634,21 @@ class Renderer:
             self.update_scr()
             return
         # end of password part
-        content: list = self.data.get_values_beautified(entry_hash)
+        content: list | None = self.data.get_values_beautified(entry_hash)
+        if content is None:
+            return
         self.quick_display(content)
 
     def order_procedure(self) -> None:
         entry_hash = self.data.get_entry_hash_by_pointer_idx(self.pointer_idx)
-        if entry_hash == None:
+        if entry_hash is None:
             return
         scheme_hash = self.data.get_scheme_hash_by_entry_hash(entry_hash)
+        if scheme_hash is None:
+            return
         scheme_values = self.data.get_scheme(scheme_hash)
+        if scheme_values is None:
+            return
         scheme_values = [["Cancel", "None"]] + scheme_values
         scheme_values.extend(self.data.hidden_stats)
         idx, _ = PopUp(self.screen).get_input_radio_btn(
@@ -1624,7 +1670,7 @@ class Renderer:
 
     def copy_procedure(self) -> None:
         entry_hash = self.data.get_entry_hash_by_pointer_idx(self.pointer_idx)
-        if entry_hash == None:
+        if entry_hash is None:
             return
         password = PopUp(self.screen).get_input_string(
             "Please provide the masterpassword as the data will be displayed without anonymization.",
@@ -1650,6 +1696,7 @@ class Renderer:
             "Press [L] to login again or [Q] to quit.", self.window_dimensions[0][1]
         )
         exiting = False
+        logo, x, y = ASCII_ONI_LOGO[0], 0, 0
         for logo in ASCII_ONI_LOGO:
             y, x = len(logo.splitlines()), max(len(i) for i in logo.splitlines())
             if y <= self.main_end_y_x[0] and x <= self.main_end_y_x[1]:
@@ -1724,7 +1771,7 @@ class Renderer:
 
     def on_item_procedure(self) -> None:
         entry_hash = self.data.get_entry_hash_by_pointer_idx(self.pointer_idx)
-        if entry_hash == None:
+        if entry_hash is None:
             return
         choice, _ = PopUp(self.screen).get_input_radio_btn(
             [
@@ -1739,7 +1786,7 @@ class Renderer:
         )
         match choice:
             case 1:
-                self.show_procedure(entry_hash)
+                self.show_procedure()
             case 2:
                 self.change_procedure(entry_hash, "entry")
             case 3:
@@ -1750,14 +1797,15 @@ class Renderer:
                 )
             case 4:
                 scheme_hash = self.data.get_scheme_hash_by_entry_hash(entry_hash)
-                if scheme_hash != None:
+                if scheme_hash is not None:
                     self.change_procedure(scheme_hash, "scheme")
             case 5:
                 scheme_hash = self.data.get_scheme_hash_by_entry_hash(entry_hash)
-                if scheme_hash != None:
-                    self.delete_procedure(
-                        scheme_hash, "scheme", self.data.get_scheme_head(scheme_hash)
-                    )
+                if scheme_hash is None:
+                    return
+                if (scheme_head := self.data.get_scheme_head(scheme_hash)) is None:
+                    return
+                self.delete_procedure(scheme_hash, "scheme", scheme_head)
         self.update_scr(hard_clear=True)
 
     # update methods
@@ -1775,11 +1823,7 @@ class Renderer:
         pointer_entry_hash = self.data.get_entry_hash_by_pointer_idx(self.pointer_idx)
         self.pointer_idx[1] = self.data.get_idx_of_entries()
         new_pointer_idx = self.data.get_pointer_idx_by_hash(pointer_entry_hash)
-        self.pointer_idx[0] = (
-            3
-            if pointer_entry_hash == None or new_pointer_idx == None
-            else new_pointer_idx
-        )
+        self.pointer_idx[0] = 3 if new_pointer_idx is None else new_pointer_idx
         self.scroll_y, self.scroll_x = (
             self.pointer_idx[0] - self.window_dimensions[0][0] + 6,
             0,
@@ -1799,7 +1843,7 @@ class Renderer:
             )
             return
         for idx, line in enumerate(self.beautified_content.splitlines()):
-            if idx == self.pointer_idx[0] and self.pointer_idx[0] != None:
+            if idx == self.pointer_idx[0] and self.pointer_idx[0] is not None:
                 line = " > " + line
                 self.output_text_to_window(1, line, start_y, start_x, color_pair(2))
             else:
@@ -1824,14 +1868,14 @@ class Renderer:
             x = self.screen.getmaxyx()[1]
         return y, x
 
-    def get_input(self) -> str:
+    def get_input(self) -> str | None:
         try:
             return self.screen.getkey()
-        except:
+        except Exception:
             return None
 
     @staticmethod
-    def get_coordinates_for_centered_text(stdscr: object, text: str) -> tuple[int]:
+    def get_coordinates_for_centered_text(stdscr: window, text: str) -> tuple[int, int]:
         height, width = stdscr.getmaxyx()
         start_y = height // 2
         start_x = (width // 2) - (len(text) // 2)
@@ -1861,7 +1905,7 @@ class Renderer:
 
     # Text manipulation and output methods
     @staticmethod
-    def space_footer_text(stdscr: object, footer_text: list) -> str:
+    def space_footer_text(stdscr: window, footer_text: list) -> str:
         char_amount = len("".join(footer_text))
         width = (stdscr.getmaxyx()[1] - 1 - char_amount) // (len(footer_text) - 1)
         return "".join([arg + " " * width for arg in footer_text]).strip()
