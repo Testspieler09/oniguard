@@ -82,7 +82,6 @@ class FileManager:
         with open(self.path_to_file, "r") as f:
             data = self.crypt.decrypt(f.readline())
             if data is not None:
-                logger.debug(data.replace("'", '"'))
                 return loads(data.replace("'", '"'))
 
         logger.critical("Wrong password provided or something else went wrong.")
