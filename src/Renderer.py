@@ -1,55 +1,58 @@
+from ast import literal_eval
+from collections import Counter
 from curses import (
-    window,
-    newwin,
-    newpad,
-    initscr,
-    init_pair,
-    color_pair,
-    start_color,
-    curs_set,
-    cbreak,
-    noecho,
-    nocbreak,
-    echo,
-    endwin,
+    A_NORMAL,
+    A_UNDERLINE,
     COLOR_BLACK,
     COLOR_BLUE,
     COLOR_GREEN,
     COLOR_RED,
-    A_UNDERLINE,
-    A_NORMAL,
+    cbreak,
+    color_pair,
+    curs_set,
+    echo,
+    endwin,
+    init_pair,
+    initscr,
+    newpad,
+    newwin,
+    nocbreak,
+    noecho,
+    start_color,
+    use_default_colors,
+    window,
 )
-from pyperclip import copy
-from prettytable import PrettyTable
-from re import match
-from random import choices, choice, sample
-from collections import Counter
-from ast import literal_eval
-from textwrap import wrap
+from logging import getLogger
 from os.path import join
-from Finder import Finder
+from random import choice, choices, sample
+from re import match
+from textwrap import wrap
+from time import sleep
+
+from prettytable import PrettyTable
+from pyperclip import copy
+
+from assets import (
+    ASCII_ONI_LOGO,
+    CONSTRAINTS,
+    FOOTER_TEXT,
+    GAME_INTRO,
+    HELP_MESSAGE,
+    NAME_REGEX,
+    ONI_ENEMIES,
+)
 from Data_Manager import (
     DataManager,
-    generate_password,
     evaluate_password,
+    generate_password,
 )
-from assets import (
-    HELP_MESSAGE,
-    FOOTER_TEXT,
-    CONSTRAINTS,
-    NAME_REGEX,
-    ASCII_ONI_LOGO,
-    ONI_ENEMIES,
-    GAME_INTRO,
-)
-from time import sleep
-from logging import getLogger
+from Finder import Finder
 
 logger = getLogger(__name__)
 
 
 class OniManager:
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, use_transparency: bool) -> None:
         self.name = name
         self.player = Entity({"name": name, "hp": 500})
         self.num_guesses = 0
@@ -66,7 +69,11 @@ class OniManager:
 
         # COLOR STUFF FOR IMPORTANCE
         start_color()
-        init_pair(2, COLOR_BLUE, COLOR_BLACK)
+        if use_transparency:
+            use_default_colors()
+            init_pair(2, COLOR_BLUE, -1)
+        else:
+            init_pair(2, COLOR_BLUE, COLOR_BLACK)
 
         # CLEAR SCREEN AND RUN IT
         self.screen.clear()
@@ -1029,7 +1036,11 @@ class PopUp:
 class Renderer:
     # TODO: make it possible to use transparent background
     def __init__(
-        self, data_mng: DataManager, beautified_content=None, pointer_idx=None
+        self,
+        data_mng: DataManager,
+        use_transparency: bool,
+        beautified_content=None,
+        pointer_idx=None,
     ) -> None:
         self.screen = initscr()
         self.data = data_mng
@@ -1077,9 +1088,15 @@ class Renderer:
 
         # COLOR STUFF FOR IMPORTANCE
         start_color()
-        init_pair(1, COLOR_GREEN, COLOR_BLACK)
-        init_pair(2, COLOR_BLUE, COLOR_BLACK)
-        init_pair(3, COLOR_RED, COLOR_BLACK)
+        if use_transparency:
+            use_default_colors()
+            init_pair(1, COLOR_GREEN, -1)
+            init_pair(2, COLOR_BLUE, -1)
+            init_pair(3, COLOR_RED, -1)
+        else:
+            init_pair(1, COLOR_GREEN, COLOR_BLACK)
+            init_pair(2, COLOR_BLUE, COLOR_BLACK)
+            init_pair(3, COLOR_RED, COLOR_BLACK)
         self.low_importance = color_pair(1)
         self.medium_importance = color_pair(2)
         self.high_importance = color_pair(3)

@@ -73,7 +73,7 @@ def main(args: argparse.Namespace) -> None:
         if not exists(leaderboard_path):
             with open(leaderboard_path, "w") as f:
                 f.write("[['Testspieler09', 35]]")
-        OniManager(args.username)
+        OniManager(args.username, args.transparent)
         exit()
 
     folder_path_cross_platform = join("..", "userdata", args.username)
@@ -88,7 +88,7 @@ def main(args: argparse.Namespace) -> None:
 
     data_manager = login_procedure(folder_path_cross_platform)
     data_manager.write_backup()
-    Renderer(data_manager)
+    Renderer(data_manager, args.transparent)
     print(
         "Thank you for using OniGuard. If there is any issue with the project open an issue on github [ https://github.com/Testspieler09/oniguard ]"
     )
@@ -109,6 +109,12 @@ if __name__ == "__main__":
     )
 
     parser.add_argument("username", help="Specify which user you want to login as.")
+    parser.add_argument(
+        "-t",
+        "--transparent",
+        action="store_true",
+        help="Make the background transparent if possible",
+    )
     parser.add_argument(
         "-d", "--delete", action="store_true", help="Delete the specified user."
     )

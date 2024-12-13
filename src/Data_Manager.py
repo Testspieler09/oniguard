@@ -1,6 +1,6 @@
 # Security packets
 # Other packets
-from base64 import urlsafe_b64encode
+from base64 import urlsafe_b64encode, b64encode, b64decode
 from datetime import datetime
 from json import loads
 from logging import getLogger
@@ -82,8 +82,6 @@ class FileManager:
         with open(self.path_to_file, "r") as f:
             data = self.crypt.decrypt(f.readline())
             if data is not None:
-                # TODO: Fix loads error here leading to #1 issue
-                # Expecting ',' delimiter:
                 logger.debug(data.replace("'", '"'))
                 return loads(data.replace("'", '"'))
 
@@ -202,13 +200,14 @@ class DataManager(FileManager):
                 entries.update({key: entry})
         return entries
 
-    def get_entry_values(self, hash: str) -> list:
+    def get_entry_values(self, hash: str) -> list[str]:
         if hash not in self.data["entries"].keys():
             return []
-        return self.data["entries"][hash]["values"]
+        return [
+            b64decode(i.encode()).decode() for i in self.data["entries"][hash]["values"]
+        ]
 
-    # TODO: decode the data before outputting
-    def get_values_beautified(self, hash: str) -> list | None:
+    def get_values_beautified(self, hash: str) -> list[str] | None:
         if hash not in self.data["entries"].keys():
             return []
         scheme_hash = self.data["entries"][hash]["scheme_hash"]
@@ -217,7 +216,12 @@ class DataManager(FileManager):
 
         table = PrettyTable()
         table.field_names = (i[0] for i in self.data["schemes"][scheme_hash])
-        table.add_row(self.data["entries"][hash]["values"])
+        table.add_row(
+            [
+                b64decode(i.encode()).decode()
+                for i in self.data["entries"][hash]["values"]
+            ]
+        )
 
         return table.__str__().splitlines()
 
@@ -250,7 +254,7 @@ class DataManager(FileManager):
             else ["You have no entries to display yet. Add one with [A]."]
         )
 
-    def get_entries_anonymised_with_hash(self, hashes: list) -> list:
+    def get_entries_anonymised_with_hash(self, hashes: list) -> list[str]:
         entries = [i for i in self.data["entries"].items() if i[0] in hashes]
         options = []
         for entry in entries:
@@ -262,7 +266,10 @@ class DataManager(FileManager):
                         for i in self.apply_constraints_to_data(
                             list(
                                 zip(
-                                    entry[1]["values"],
+                                    [
+                                        b64decode(i.encode()).decode()
+                                        for i in entry[1]["values"]
+                                    ],
                                     (
                                         i[1]
                                         for i in self.data["schemes"][
@@ -376,13 +383,12 @@ class DataManager(FileManager):
         self.data["settings"]["hidden_schemes"] = hidden_schemes
 
     # Add data
-    # TODO: use base64 encoding to fix the loads problem
-    def add_entry(self, scheme_hash: str, entry: list) -> None:
+    def add_entry(self, scheme_hash: str, entry: list[str]) -> None:
         data = {}
         now = str(datetime.now())
         entry.extend([now, now])
         data["scheme_hash"] = scheme_hash
-        data["values"] = entry
+        data["values"] = [b64encode(i.encode()).decode() for i in entry]
         self.data["entries"].update({self.gen_hash(): data})
 
     def add_scheme(self, scheme: list) -> None:
@@ -390,13 +396,15 @@ class DataManager(FileManager):
         self.data["schemes"].update({self.gen_hash(): scheme})
 
     # Update methods
-    def update_entry(self, entry_hash: str, new_data: list) -> None:
+    def update_entry(self, entry_hash: str, new_data: list[str]) -> None:
         if entry_hash not in self.data["entries"].keys():
             return
         new_data.extend(
             [str(datetime.now()), self.data["entries"][entry_hash]["values"][-1]]
         )
-        self.data["entries"][entry_hash]["values"] = new_data
+        self.data["entries"][entry_hash]["values"] = [
+            b64encode(i.encode()) for i in new_data
+        ]
 
     def update_scheme(self, scheme_hash: str, new_data: list) -> None:
         if scheme_hash not in self.data["schemes"].keys():
